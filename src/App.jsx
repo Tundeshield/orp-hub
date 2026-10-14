@@ -24,7 +24,7 @@ function NotConfigured() {
     <div className="auth-panel" style={{ minHeight: '100vh' }}>
       <div className="auth-card">
         <h1>Almost there</h1>
-        <p className="muted">ORP Hub isn't connected to Firebase yet. Add the <code>VITE_FIREBASE_*</code> environment variables (see README) and redeploy.</p>
+        <p className="muted">Pastor's Desk isn't connected to Firebase yet. Add the <code>VITE_FIREBASE_*</code> environment variables (see README) and redeploy.</p>
       </div>
     </div>
   );
@@ -32,7 +32,7 @@ function NotConfigured() {
 
 function Gate() {
   const { user, profile, loading } = useAuth();
-  if (loading) return <Loading label="Opening ORP Hub…" />;
+  if (loading) return <Loading label="Opening Pastor's Desk…" />;
   if (!user) return <Login />;
   if (!profile || !profile.active || !(profile.roles || []).length) return <Pending />;
   return (

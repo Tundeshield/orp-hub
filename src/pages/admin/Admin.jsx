@@ -77,7 +77,7 @@ function UserModal({ u, onClose, ministries }) {
       const batch = writeBatch(db);
       batch.update(doc(db, 'users', u.id), { roles: f.roles, active: f.active, ministryId: f.ministryId, ministryName: m?.name || '', updatedAt: serverTimestamp() });
       addAudit(batch, profile, 'user.updated', 'user', u.id, `${u.name}: ${f.active ? 'active' : 'inactive'} — ${f.roles.join(', ')}`);
-      if (!u.active && f.active) addNotify(batch, profile, u.id, 'Welcome to ORP Hub', `Your account is active as: ${f.roles.map((r) => ROLES[r]).join(', ')}`, '/');
+      if (!u.active && f.active) addNotify(batch, profile, u.id, 'Welcome to Pastor\'s Desk', `Your account is active as: ${f.roles.map((r) => ROLES[r]).join(', ')}`, '/');
       await batch.commit();
     }, 'Saved');
     if (ok) onClose();

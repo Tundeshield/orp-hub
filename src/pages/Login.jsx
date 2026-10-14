@@ -35,10 +35,10 @@ export default function Login() {
   return (
     <div className="auth-wrap">
       <div className="auth-art">
-        <div className="brand"><div className="brand-mark">✝</div><div><div className="brand-name">ORP Hub</div></div></div>
+        <div className="brand"><div className="brand-mark">✝</div><div><div className="brand-name">Pastor&rsquo;s Desk</div><div className="brand-sub">{churchName}</div></div></div>
         <div>
-          <h2>Approvals, appointments and reports — in one place.</h2>
-          <p>The working space for the Office of the Resident Pastor, {churchName}.</p>
+          <h2>Pastoral work, organised.</h2>
+          <p>Approvals, appointments, reports and pastoral care for the Office of the Resident Pastor, {churchName}.</p>
         </div>
         <p className="small">Access is by invitation. New accounts are activated by the administrator.</p>
       </div>

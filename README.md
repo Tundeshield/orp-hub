@@ -1,4 +1,6 @@
-# ORP Hub
+# Pastor's Desk (ORP Hub)
+
+*Pastoral work, organised.* Built for The Elevation Church · Ijebu Ode.
 
 A simple, free-to-run web app for the **Office of the Resident Pastor**: financial approvals and payments, the pastor's appointments, ministry reports, pastoral care, and tasks, all in one place.
 

@@ -25,8 +25,8 @@ export default function Layout() {
         <div className="brand">
           <div className="brand-mark">✝</div>
           <div>
-            <div className="brand-name">ORP Hub</div>
-            <div className="brand-sub">Office of the Resident Pastor</div>
+            <div className="brand-name">Pastor&rsquo;s Desk</div>
+            <div className="brand-sub">{churchName}</div>
           </div>
         </div>
         <nav className="nav">

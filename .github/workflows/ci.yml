@@ -42,7 +42,7 @@ jobs:
           VITE_FIREBASE_AUTH_DOMAIN: demo-orp.firebaseapp.com
           VITE_FIREBASE_PROJECT_ID: demo-orp
           VITE_FIREBASE_APP_ID: demo-app
-          VITE_CHURCH_NAME: Demo Church
+          VITE_CHURCH_NAME: The Elevation Church · Ijebu Ode
       - name: Install browser
         run: npx playwright install --with-deps chromium
       - name: End-to-end workflows (desktop + mobile)

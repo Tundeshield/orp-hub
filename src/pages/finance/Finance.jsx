@@ -137,7 +137,7 @@ export default function Finance() {
       {tab === 'ledger' && viewer && <Ledger txs={txs} funds={fundList} />}
       {tab === 'reconcile' && viewer && (
         <Card title="Reconciliations" pad={false} actions={fin && <Button size="sm" onClick={() => setModal('reconcile')}>New reconciliation</Button>}>
-          {recs.loading ? <Loading /> : !recs.data.length ? <Empty title="No reconciliations recorded">Compare your bank or cash balance with ORP Hub's records regularly (e.g. monthly).</Empty> : (
+          {recs.loading ? <Loading /> : !recs.data.length ? <Empty title="No reconciliations recorded">Compare your bank or cash balance with these records regularly (e.g. monthly).</Empty> : (
             <div className="table-wrap"><table>
               <thead><tr><th>As of</th><th>Scope</th><th className="num">Statement</th><th className="num">Records</th><th className="num">Difference</th><th className="hide-sm">Note</th><th className="hide-sm">By</th></tr></thead>
               <tbody>{recs.data.map((r) => (
