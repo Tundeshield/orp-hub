@@ -26,3 +26,8 @@ export async function shot(page, testInfo, name) {
 }
 
 export const dialog = (page) => page.getByRole('dialog');
+
+// Toasts appear only after the server confirms a write.
+export async function saved(page, text) {
+  await expect(page.locator('.toast', { hasText: text }).first()).toBeVisible();
+}

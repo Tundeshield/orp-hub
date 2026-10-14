@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { login, logout, shot, dialog } from './helpers.js';
+import { login, logout, shot, dialog, saved } from './helpers.js';
 
 // Workflow tests mutate data, so they run once (desktop). Mobile runs the visual/smoke pass.
 test.describe.configure({ mode: 'serial' });
@@ -14,6 +14,7 @@ test.describe('workflows', () => {
     await expect(page.getByRole('heading', { name: 'Food items for widows outreach' })).toBeVisible();
     await page.getByRole('button', { name: 'Approve', exact: true }).click();
     await dialog(page).getByRole('button', { name: /Approve ₦120,000\.00/ }).click();
+    await saved(page, 'Request approved');
     await expect(page.locator('.kv').getByText('Approved — unpaid')).toBeVisible();
     await shot(page, info, 'request-approved');
   });
@@ -24,6 +25,7 @@ test.describe('workflows', () => {
     await page.getByRole('button', { name: 'Ask for clarification' }).click();
     await dialog(page).getByLabel('What needs clarifying?').fill('Which model, and is there a cheaper option?');
     await dialog(page).getByRole('button', { name: 'Send question' }).click();
+    await saved(page, 'Clarification requested');
     await expect(page.locator('.kv').getByText('Clarification requested')).toBeVisible();
     await logout(page);
     await login(page, 'youth@orp.test');
@@ -74,6 +76,7 @@ test.describe('workflows', () => {
     await expect(d.getByText(/currently available in this fund/)).toBeVisible();
     await d.getByLabel('Purpose and breakdown').fill('Hall hire for the regional youth conference.');
     await d.getByRole('button', { name: 'Submit for approval' }).click();
+    await saved(page, 'Request submitted');
     await expect(page.getByRole('heading', { name: 'Youth conference hall hire' })).toBeVisible();
     await logout(page);
     await login(page, 'pastor@orp.test');
@@ -125,7 +128,7 @@ test.describe('workflows', () => {
       await page.getByLabel(k).fill('Children\'s harvest drama and Bible memory contest.');
     }
     await page.getByRole('button', { name: 'Submit report' }).click();
-    await expect(page.getByText('Submitted', { exact: true }).first()).toBeVisible();
+    await saved(page, 'Report submitted');
     await logout(page);
     await login(page, 'assistant@orp.test');
     await page.goto('/reports?tab=all');
@@ -147,7 +150,7 @@ test.describe('workflows', () => {
     await page.getByRole('button', { name: '→ make task' }).first().click();
     await dialog(page).getByLabel('Due date').fill('2030-01-15');
     await dialog(page).getByRole('button', { name: 'Assign task' }).click();
-    await expect(dialog(page)).toHaveCount(0);
+    await saved(page, 'Task assigned');
     await logout(page);
     await login(page, 'youth@orp.test');
     await page.goto('/tasks');
