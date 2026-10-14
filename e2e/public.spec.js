@@ -5,7 +5,7 @@ import { login, shot } from './helpers.js';
 test('visitor sends a confidential prayer request without signing in', async ({ page }, info) => {
   await page.goto('/connect');
   await expect(page.getByRole('heading', { name: 'Choose your branch' })).toBeVisible();
-  await page.getByText('The Elevation Church · Ijebu Ode').click();
+  await page.getByRole('link', { name: /Ijebu Ode/ }).click();
   await expect(page.getByRole('heading', { name: 'Welcome' })).toBeVisible();
   await shot(page, info, 'public-home');
   await page.getByText('Send a prayer request').click();
