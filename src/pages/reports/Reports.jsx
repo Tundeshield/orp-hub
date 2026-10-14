@@ -186,11 +186,17 @@ function RequestReportsModal({ open, onClose, templates }) {
 }
 
 function Summary({ reports, templates }) {
-  const periods = [...new Set(reports.map((r) => r.period))];
-  const [templateId, setTemplateId] = useState(templates[0]?.id || '');
-  const [period, setPeriod] = useState(periods[periods.length - 1] || '');
-  useEffect(() => { if (!templateId && templates[0]) setTemplateId(templates[0].id); }, [templates, templateId]);
-  useEffect(() => { if (!period && periods.length) setPeriod(periods[periods.length - 1]); }, [periods, period]);
+  // Default to the most recent template/period that has submitted reports.
+  const byRecent = [...reports].sort((a, b) => (toDate(b.dueDate) || 0) - (toDate(a.dueDate) || 0));
+  const latestDone = byRecent.find((r) => ['submitted', 'reviewed'].includes(r.status)) || byRecent[0];
+  const [templateId, setTemplateId] = useState('');
+  const [period, setPeriod] = useState('');
+  useEffect(() => {
+    if (!templateId && latestDone) { setTemplateId(latestDone.templateId); setPeriod(latestDone.period); }
+    else if (!templateId && templates[0]) setTemplateId(templates[0].id);
+  }, [latestDone, templates, templateId]);
+  const periods = [...new Set(byRecent.filter((r) => r.templateId === templateId).map((r) => r.period))];
+  useEffect(() => { if (periods.length && !periods.includes(period)) setPeriod(periods[0]); }, [periods, period]);
   const t = templates.find((x) => x.id === templateId);
   const scoped = reports.filter((r) => r.templateId === templateId && r.period === period);
   const fields = scoped[0]?.fields || t?.fields || [];
