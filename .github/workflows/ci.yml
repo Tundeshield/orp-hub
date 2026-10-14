@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/firebase/emulators
+          key: firebase-emulators-${{ hashFiles('package-lock.json') }}
+      - run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Unit tests (finance maths, booking conflicts, report consolidation)
+        run: npm test
+      - name: Security rules tests (Firestore emulator)
+        run: npm run test:rules
+      - name: Build against emulators
+        run: npm run build
+        env:
+          VITE_USE_EMULATORS: 'true'
+          VITE_FIREBASE_API_KEY: demo-key
+          VITE_FIREBASE_AUTH_DOMAIN: demo-orp.firebaseapp.com
+          VITE_FIREBASE_PROJECT_ID: demo-orp
+          VITE_FIREBASE_APP_ID: demo-app
+          VITE_CHURCH_NAME: Demo Church
+      - name: Install browser
+        run: npx playwright install --with-deps chromium
+      - name: End-to-end workflows (desktop + mobile)
+        run: npx firebase emulators:exec --only auth,firestore --project demo-orp "npm run seed:emulator && npx playwright test"
+      - name: Publish screenshots to the ci-screenshots branch
+        if: always() && github.event_name != 'pull_request'
+        run: |
+          [ -d e2e-screenshots ] || exit 0
+          cd e2e-screenshots
+          git init -q -b ci-screenshots
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          echo "Screenshots from ${{ github.sha }} (${{ job.status }})" > README.md
+          git add -A && git commit -qm "Screenshots for ${{ github.sha }}"
+          git push -qf "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" ci-screenshots

@@ -1,0 +1,13 @@
+node_modules
+dist
+.env
+.env.local
+*.log
+firebase-debug.log*
+firestore-debug.log*
+ui-debug.log*
+service-account*.json
+backups/
+e2e-screenshots/
+test-results/
+playwright-report/

@@ -1,0 +1,30 @@
+// Full backup of every Firestore collection (including confidential pastoral data) to a JSON file.
+// Usage: node scripts/backup.mjs path/to/service-account.json
+// Keep the output file and the service-account key somewhere private. Never commit them.
+import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
+import { initializeApp, cert } from 'firebase-admin/app';
+import { getFirestore, Timestamp } from 'firebase-admin/firestore';
+
+const keyPath = process.argv[2];
+if (!keyPath) { console.error('Usage: node scripts/backup.mjs <service-account.json>'); process.exit(1); }
+const key = JSON.parse(readFileSync(keyPath, 'utf8'));
+initializeApp({ credential: cert(key) });
+const db = getFirestore();
+
+const ser = (v) => {
+  if (v instanceof Timestamp) return { __ts: v.toDate().toISOString() };
+  if (Array.isArray(v)) return v.map(ser);
+  if (v && typeof v === 'object') return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, ser(x)]));
+  return v;
+};
+
+const out = { project: key.project_id, exportedAt: new Date().toISOString(), collections: {} };
+for (const c of await db.listCollections()) {
+  const snap = await c.get();
+  out.collections[c.id] = snap.docs.map((d) => ({ id: d.id, ...ser(d.data()) }));
+  console.log(`${c.id}: ${snap.size}`);
+}
+mkdirSync('backups', { recursive: true });
+const file = `backups/orp-hub-full-${new Date().toISOString().slice(0, 10)}.json`;
+writeFileSync(file, JSON.stringify(out));
+console.log(`Saved ${file}`);

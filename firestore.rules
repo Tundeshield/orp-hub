@@ -1,0 +1,348 @@
+rules_version = '2';
+
+// ORP Hub — Firestore security rules.
+// Money is stored as integer kobo. Every change to a fund's totals must be
+// written in the same batch as exactly one new ledger entry (transactions/*),
+// and these rules check that the totals move by exactly that entry's amount.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------- helpers ----------
+    function signedIn() { return request.auth != null; }
+    function uid() { return request.auth.uid; }
+    function doc(path) { return /databases/$(database)/documents/$(path); }
+    function userDoc() { return get(/databases/$(database)/documents/users/$(request.auth.uid)); }
+    function active() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && userDoc().data.active == true;
+    }
+    function hasRole(r) { return active() && userDoc().data.roles.hasAny([r]); }
+    function hasAnyRole(rs) { return active() && userDoc().data.roles.hasAny(rs); }
+    function isFinanceViewer() { return hasAnyRole(['pastor', 'finance', 'admin']); }
+    function isDiaryManager() { return hasAnyRole(['pastor', 'assistant', 'admin']); }
+    function isReviewer() { return hasAnyRole(['pastor', 'assistant', 'admin']); }
+    function changed() { return request.resource.data.diff(resource.data).affectedKeys(); }
+    function onlyChanged(keys) { return changed().hasOnly(keys); }
+    function isMoney(v) { return v is int && v > 0 && v <= 100000000000000; }
+    function timelineGrows() {
+      return request.resource.data.timeline is list
+        && request.resource.data.timeline.size() == resource.data.timeline.size() + 1;
+    }
+
+    // ---------- setup & users ----------
+    // meta/setup is created exactly once, by the first user, who becomes admin.
+    match /meta/setup {
+      allow read: if signedIn();
+      allow create: if signedIn()
+        && request.resource.data.adminUid == uid()
+        && getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.roles == ['admin'];
+      allow update, delete: if false;
+    }
+
+    match /users/{userId} {
+      allow read: if (signedIn() && userId == uid()) || active();
+      allow create: if signedIn() && userId == uid()
+        && request.resource.data.email == request.auth.token.email
+        && (
+          // normal sign-up: waits for an admin to assign roles
+          (request.resource.data.roles == [] && request.resource.data.active == false)
+          ||
+          // first ever user: becomes admin, in the same batch as meta/setup
+          (request.resource.data.roles == ['admin'] && request.resource.data.active == true
+            && !exists(/databases/$(database)/documents/meta/setup)
+            && getAfter(/databases/$(database)/documents/meta/setup).data.adminUid == uid())
+        );
+      allow update: if
+        (signedIn() && userId == uid() && onlyChanged(['name', 'phone', 'updatedAt']))
+        || (hasRole('admin') && request.resource.data.roles is list
+            && request.resource.data.email == resource.data.email
+            // an admin cannot remove their own admin role (avoids lock-out)
+            && (userId != uid() || request.resource.data.roles.hasAny(['admin'])));
+      allow delete: if false;
+    }
+
+    match /ministries/{id} {
+      allow read: if active();
+      allow write: if isReviewer();
+    }
+
+    // ---------- finance ----------
+    match /funds/{fundId} {
+      allow read: if active();
+      allow create: if hasAnyRole(['finance', 'pastor', 'admin'])
+        && request.resource.data.name is string && request.resource.data.name.size() > 0
+        && request.resource.data.allocated == 0
+        && request.resource.data.committed == 0
+        && request.resource.data.paid == 0
+        && request.resource.data.lastTxId == null;
+      allow update: if
+        (hasAnyRole(['finance', 'pastor', 'admin']) && onlyChanged(['name', 'description', 'active', 'updatedAt']))
+        || ledgerFundUpdate(fundId);
+      allow delete: if false;
+    }
+
+    function ledgerFundUpdate(fundId) {
+      let f = request.resource.data;
+      let o = resource.data;
+      let txPath = /databases/$(database)/documents/transactions/$(f.lastTxId);
+      let tx = getAfter(txPath).data;
+      return active()
+        && f.lastTxId is string
+        && !exists(txPath)
+        && tx.fundId == fundId
+        && onlyChanged(['allocated', 'committed', 'paid', 'lastTxId', 'updatedAt'])
+        && f.committed <= f.allocated
+        && f.paid >= 0
+        && (
+          (tx.type in ['allocation', 'receipt'] && f.allocated == o.allocated + tx.amount && f.committed == o.committed && f.paid == o.paid)
+          || (tx.type == 'commit' && f.committed == o.committed + tx.amount && f.allocated == o.allocated && f.paid == o.paid)
+          || (tx.type in ['payment', 'advance'] && f.paid == o.paid + tx.amount && f.allocated == o.allocated && f.committed == o.committed)
+          || (tx.type == 'refund' && f.paid == o.paid - tx.amount && f.allocated == o.allocated && f.committed == o.committed)
+          || (tx.type == 'release' && f.committed == o.committed - tx.amount && f.allocated == o.allocated && f.paid == o.paid)
+        );
+    }
+
+    // Ledger: append-only. Each entry must move its fund (and request) consistently.
+    match /transactions/{txId} {
+      allow read: if isFinanceViewer();
+      allow update, delete: if false;
+      allow create: if active()
+        && request.resource.data.createdBy == uid()
+        && request.resource.data.amount is int
+        && getAfter(/databases/$(database)/documents/funds/$(request.resource.data.fundId)).data.lastTxId == txId
+        && (
+          (request.resource.data.type == 'allocation' && hasAnyRole(['finance', 'pastor', 'admin'])
+            && request.resource.data.amount != 0 && request.resource.data.requestId == null)
+          || (request.resource.data.type == 'receipt' && hasRole('finance')
+            && isMoney(request.resource.data.amount) && request.resource.data.requestId == null)
+          || (request.resource.data.type == 'commit' && hasRole('pastor') && commitOk(txId))
+          || (request.resource.data.type in ['payment', 'advance'] && hasRole('finance') && paymentOk(txId))
+          || (request.resource.data.type == 'refund' && hasRole('finance') && refundOk(txId))
+          || (request.resource.data.type == 'release' && hasAnyRole(['finance', 'pastor']) && releaseOk(txId))
+        );
+    }
+
+    function reqBefore() { return get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data; }
+    function reqAfter() { return getAfter(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data; }
+
+    function commitOk(txId) {
+      let r = reqBefore();
+      let a = reqAfter();
+      return r.status == 'pending'
+        && r.fundId == request.resource.data.fundId
+        && request.resource.data.amount == r.amount
+        && a.status == 'approved' && a.lastTxId == txId;
+    }
+    function paymentOk(txId) {
+      let r = reqBefore();
+      let a = reqAfter();
+      let amt = request.resource.data.amount;
+      return isMoney(amt)
+        && r.status in ['approved', 'partly_paid']
+        && r.fundId == request.resource.data.fundId
+        && r.paid + amt + r.released <= r.amount
+        && a.paid == r.paid + amt && a.lastTxId == txId
+        && a.status == (a.paid + r.released == r.amount ? 'paid' : 'partly_paid');
+    }
+    function refundOk(txId) {
+      let r = reqBefore();
+      let a = reqAfter();
+      let amt = request.resource.data.amount;
+      return isMoney(amt)
+        && r.status in ['partly_paid', 'paid']
+        && r.fundId == request.resource.data.fundId
+        && amt <= r.paid
+        && a.paid == r.paid - amt && a.lastTxId == txId
+        && a.status == (a.paid == 0 ? 'approved' : 'partly_paid');
+    }
+    function releaseOk(txId) {
+      let r = reqBefore();
+      let a = reqAfter();
+      let amt = request.resource.data.amount;
+      return isMoney(amt)
+        && r.status in ['approved', 'partly_paid']
+        && r.fundId == request.resource.data.fundId
+        && amt == r.amount - r.paid - r.released
+        && a.released == r.released + amt && a.lastTxId == txId
+        && a.status == 'closed';
+    }
+
+    match /requests/{reqId} {
+      allow read: if (active() && resource.data.requestedBy == uid()) || isFinanceViewer();
+      allow create: if active()
+        && request.resource.data.requestedBy == uid()
+        && request.resource.data.status == 'pending'
+        && isMoney(request.resource.data.amount)
+        && request.resource.data.paid == 0
+        && request.resource.data.released == 0
+        && request.resource.data.lastTxId == null
+        && request.resource.data.timeline.size() == 1
+        && exists(/databases/$(database)/documents/funds/$(request.resource.data.fundId));
+      allow update: if timelineGrows() && (
+        // requester edits, resubmits after clarification, or cancels — only before a decision
+        (active() && resource.data.requestedBy == uid()
+          && resource.data.status in ['pending', 'clarification']
+          && request.resource.data.status in ['pending', 'cancelled']
+          && isMoney(request.resource.data.amount)
+          && onlyChanged(['title', 'description', 'fundId', 'fundName', 'amount', 'category', 'neededBy', 'status', 'timeline', 'updatedAt']))
+        // pastor rejects or asks for clarification (approval goes through the ledger)
+        || (hasRole('pastor') && resource.data.status == 'pending'
+          && request.resource.data.status in ['rejected', 'clarification']
+          && onlyChanged(['status', 'decisionNote', 'decidedBy', 'decidedByName', 'decidedAt', 'timeline', 'updatedAt']))
+        // ledger-driven: approval, payment, refund, release
+        || (active() && request.resource.data.lastTxId is string
+          && !exists(/databases/$(database)/documents/transactions/$(request.resource.data.lastTxId))
+          && getAfter(/databases/$(database)/documents/transactions/$(request.resource.data.lastTxId)).data.requestId == reqId
+          && request.resource.data.amount == resource.data.amount
+          && request.resource.data.fundId == resource.data.fundId
+          && onlyChanged(['status', 'paid', 'released', 'lastTxId', 'decisionNote', 'decidedBy', 'decidedByName', 'decidedAt', 'timeline', 'updatedAt']))
+      );
+      allow delete: if false;
+    }
+
+    match /reconciliations/{id} {
+      allow read: if isFinanceViewer();
+      allow create: if hasRole('finance') && request.resource.data.createdBy == uid()
+        && request.resource.data.statementBalance is int
+        && request.resource.data.bookBalance is int;
+      allow update, delete: if false;
+    }
+
+    // ---------- meetings ----------
+    match /slots/{slotId} {
+      allow read: if active();
+      allow create: if isDiaryManager()
+        && request.resource.data.status in ['open', 'blocked']
+        && request.resource.data.appointmentId == null
+        && request.resource.data.start is timestamp
+        && request.resource.data.end is timestamp
+        && request.resource.data.end > request.resource.data.start;
+      allow delete: if isDiaryManager() && resource.data.status != 'booked';
+      allow update: if active() && (
+        // book an open slot (with a new appointment in the same batch)
+        (resource.data.status == 'open' && request.resource.data.status == 'booked'
+          && onlyChanged(['status', 'appointmentId', 'bookedBy', 'updatedAt'])
+          && request.resource.data.bookedBy == uid()
+          && getAfter(/databases/$(database)/documents/appointments/$(request.resource.data.appointmentId)).data.slotId == slotId
+          && !exists(/databases/$(database)/documents/appointments/$(request.resource.data.appointmentId)))
+        // free a booked slot (the appointment is cancelled/rescheduled in the same batch)
+        || (resource.data.status == 'booked' && request.resource.data.status == 'open'
+          && (resource.data.bookedBy == uid() || isDiaryManager()
+              || get(/databases/$(database)/documents/appointments/$(resource.data.appointmentId)).data.attendeeUid == uid())
+          && request.resource.data.appointmentId == null && request.resource.data.bookedBy == null
+          && onlyChanged(['status', 'appointmentId', 'bookedBy', 'updatedAt'])
+          && getAfter(/databases/$(database)/documents/appointments/$(resource.data.appointmentId)).data.status in ['cancelled', 'rescheduled'])
+        // diary managers block/unblock or move slots that are not booked
+        || (isDiaryManager() && resource.data.status in ['open', 'blocked']
+          && request.resource.data.status in ['open', 'blocked']
+          && request.resource.data.appointmentId == null
+          && request.resource.data.end > request.resource.data.start)
+      );
+    }
+
+    match /appointments/{apptId} {
+      allow read: if (active() && (resource.data.attendeeUid == uid() || resource.data.bookedBy == uid())) || isDiaryManager();
+      allow create: if active()
+        && request.resource.data.bookedBy == uid()
+        && (request.resource.data.attendeeUid == uid() || isDiaryManager())
+        && request.resource.data.status == 'booked'
+        && get(/databases/$(database)/documents/slots/$(request.resource.data.slotId)).data.status == 'open'
+        && getAfter(/databases/$(database)/documents/slots/$(request.resource.data.slotId)).data.appointmentId == apptId
+        && request.resource.data.start == get(/databases/$(database)/documents/slots/$(request.resource.data.slotId)).data.start;
+      allow update: if active() && resource.data.status == 'booked' && (
+        ((resource.data.bookedBy == uid() || resource.data.attendeeUid == uid() || isDiaryManager())
+          && request.resource.data.status in ['cancelled', 'rescheduled']
+          && onlyChanged(['status', 'cancelReason', 'cancelledBy', 'rescheduledTo', 'updatedAt'])
+          && getAfter(/databases/$(database)/documents/slots/$(resource.data.slotId)).data.appointmentId != apptId)
+        || (isDiaryManager() && request.resource.data.status in ['booked', 'completed', 'no_show']
+          && onlyChanged(['status', 'updatedAt']))
+      );
+      allow delete: if false;
+    }
+
+    match /meetingNotes/{id} {
+      allow read: if hasRole('pastor') || (hasRole('assistant') && resource.data.confidential == false);
+      allow create: if (hasRole('pastor') || (hasRole('assistant') && request.resource.data.confidential == false))
+        && request.resource.data.createdBy == uid();
+      allow update: if hasRole('pastor')
+        || (hasRole('assistant') && resource.data.confidential == false && request.resource.data.confidential == false);
+      allow delete: if active() && resource.data.createdBy == uid();
+    }
+
+    // ---------- reports ----------
+    match /reportTemplates/{id} {
+      allow read: if active();
+      allow write: if isReviewer();
+    }
+
+    match /reports/{id} {
+      allow read: if (active() && resource.data.leaderUid == uid()) || isReviewer();
+      allow create: if isReviewer() && request.resource.data.status == 'pending';
+      allow delete: if isReviewer() && resource.data.status == 'pending';
+      allow update: if
+        // leader saves a draft or submits
+        (active() && resource.data.leaderUid == uid()
+          && resource.data.status in ['pending', 'revision']
+          && request.resource.data.status in [resource.data.status, 'submitted']
+          && onlyChanged(['answers', 'status', 'submittedAt', 'timeline', 'updatedAt']))
+        // reviewer reviews or asks for revision
+        || (isReviewer() && resource.data.status == 'submitted'
+          && request.resource.data.status in ['reviewed', 'revision']
+          && onlyChanged(['status', 'reviewerNote', 'reviewedAt', 'reviewedBy', 'reviewedByName', 'timeline', 'updatedAt']))
+        // reviewer adjusts an unsubmitted report (due date, leader)
+        || (isReviewer() && resource.data.status in ['pending', 'revision']
+          && onlyChanged(['dueDate', 'leaderUid', 'leaderName', 'timeline', 'updatedAt']));
+    }
+
+    // ---------- pastor ----------
+    match /followups/{id} {
+      allow read, write: if hasAnyRole(['pastor', 'assistant']);
+    }
+
+    match /prayers/{id} {
+      allow read: if (active() && resource.data.submittedBy == uid())
+        || hasRole('pastor')
+        || (hasRole('assistant') && resource.data.confidential == false)
+        || (active() && resource.data.kind == 'testimony' && resource.data.status == 'shared');
+      allow create: if active() && request.resource.data.submittedBy == uid()
+        && request.resource.data.status == 'new'
+        && request.resource.data.kind in ['prayer', 'testimony'];
+      allow update: if (hasRole('pastor') || (hasRole('assistant') && resource.data.confidential == false))
+        && onlyChanged(['status', 'updatedAt'])
+        && (request.resource.data.status != 'shared' || (resource.data.kind == 'testimony' && resource.data.confidential == false));
+      allow delete: if active() && resource.data.submittedBy == uid() && resource.data.status == 'new';
+    }
+
+    // Confidential pastoral notes: the pastor who wrote them, nobody else (not even admins).
+    match /pastoralNotes/{id} {
+      allow read, update, delete: if hasRole('pastor') && resource.data.createdBy == uid();
+      allow create: if hasRole('pastor') && request.resource.data.createdBy == uid();
+    }
+
+    // ---------- tasks, notifications, audit ----------
+    match /tasks/{id} {
+      allow read: if active() && (resource.data.assigneeUid == uid() || resource.data.createdBy == uid()
+        || hasAnyRole(['pastor', 'admin']));
+      allow create: if active() && request.resource.data.createdBy == uid();
+      allow update: if active() && (
+        resource.data.createdBy == uid() || hasAnyRole(['pastor', 'admin'])
+        || (resource.data.assigneeUid == uid() && onlyChanged(['status', 'progressNote', 'completedAt', 'updatedAt']))
+      );
+      allow delete: if active() && resource.data.createdBy == uid();
+    }
+
+    match /notifications/{id} {
+      allow read, delete: if signedIn() && resource.data.toUid == uid();
+      allow create: if active() && request.resource.data.fromUid == uid() && request.resource.data.read == false;
+      allow update: if signedIn() && resource.data.toUid == uid() && onlyChanged(['read']);
+    }
+
+    match /audit/{id} {
+      allow read: if hasAnyRole(['admin', 'pastor']);
+      allow create: if active() && request.resource.data.actorUid == uid();
+      allow update, delete: if false;
+    }
+  }
+}
