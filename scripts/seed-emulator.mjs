@@ -22,7 +22,7 @@ const auth = getAuth();
 const db = getFirestore();
 const PASSWORD = 'Password123!';
 const BRANCH = 'ijebu-ode';
-const B = bdoc(`branches/${BRANCH}`);
+const B = db.doc(`branches/${BRANCH}`);
 const bdoc = (p) => B.collection(p.split('/')[0]).doc(p.split('/').slice(1).join('/'));
 const now = new Date();
 const day = (n, h = 9, m = 0) => { const d = new Date(now); d.setDate(d.getDate() + n); d.setHours(h, m, 0, 0); return d; };

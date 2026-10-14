@@ -46,7 +46,10 @@ jobs:
       - name: Install browser
         run: npx playwright install --with-deps chromium
       - name: End-to-end workflows (desktop + mobile)
-        run: npx firebase emulators:exec --only auth,firestore --project demo-orp "npm run seed:emulator && npx playwright test"
+        run: |
+          mkdir -p e2e-screenshots
+          set -o pipefail
+          npx firebase emulators:exec --only auth,firestore --project demo-orp "npm run seed:emulator && npx playwright test" 2>&1 | tee e2e-screenshots/e2e-log.txt
       - name: Publish screenshots to the ci-screenshots branch
         if: always() && github.event_name != 'pull_request'
         run: |
