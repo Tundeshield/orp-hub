@@ -175,7 +175,8 @@ describe('finance', () => {
 
 describe('appointments', () => {
   function book(d, uid, slotId, apptId) {
-    return env.withSecurityRulesDisabled(async (ctx) => (await getDoc(doc(ctx.firestore(), 'slots', slotId))).data()).then((s) => {
+    let s;
+    return env.withSecurityRulesDisabled(async (ctx) => { s = (await getDoc(doc(ctx.firestore(), 'slots', slotId))).data(); }).then(() => {
       const b = writeBatch(d);
       b.set(doc(d, 'appointments', apptId), { slotId, start: s.start, end: s.end, bookedBy: uid, attendeeUid: uid, attendeeName: uid, purpose: 'x', status: 'booked' });
       b.update(doc(d, 'slots', slotId), { status: 'booked', appointmentId: apptId, bookedBy: uid });
