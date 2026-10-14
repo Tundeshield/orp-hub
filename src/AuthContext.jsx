@@ -41,7 +41,7 @@ export function AuthProvider({ children }) {
 
   const value = {
     user, profile,
-    loading: user === undefined || (user && profile === undefined),
+    loading: user === undefined || (user && !user.isAnonymous && profile === undefined),
     async signIn(email, password) {
       const { user: u } = await signInWithEmailAndPassword(auth, email, password);
       await ensureProfile(u);

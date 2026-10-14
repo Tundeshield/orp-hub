@@ -185,7 +185,7 @@ function Prayers() {
       const batch = writeBatch(db);
       batch.update(doc(db, 'prayers', p.id), { status, updatedAt: serverTimestamp() });
       const msg = { praying: 'The pastor is praying with you', answered: 'Marked as answered', shared: 'Your testimony has been shared with the church team' }[status];
-      if (msg) addNotify(batch, profile, p.submittedBy, msg, p.content.slice(0, 80), '/pastor?tab=prayer');
+      if (msg && p.source !== 'public') addNotify(batch, profile, p.submittedBy, msg, p.content.slice(0, 80), '/pastor?tab=prayer');
       await batch.commit();
     });
   }
@@ -213,7 +213,8 @@ function Prayers() {
                 <div className="row" style={{ gap: 6 }}>
                   <Badge tone={p.kind === 'testimony' ? 'green' : 'blue'}>{p.kind}</Badge>
                   {p.confidential && <Badge tone="red">confidential</Badge>}
-                  <span className="list-meta">{p.anonymous && view !== 'mine' ? 'Anonymous' : p.name} · {fmtDateTime(p.createdAt)}</span>
+                  {p.source === 'public' && <Badge tone="violet">via QR / public page</Badge>}
+                  <span className="list-meta">{(p.anonymous && view !== 'mine') || !p.name ? 'Anonymous' : p.name}{p.phone ? ` · ${p.phone}` : ''} · {fmtDateTime(p.createdAt)}</span>
                 </div>
                 <p className="pre" style={{ margin: '6px 0 0' }}>{p.content}</p>
               </div>

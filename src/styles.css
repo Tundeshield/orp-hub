@@ -250,3 +250,48 @@ input[type=checkbox] { width: auto; }
 
 .detail-grid { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); align-items: start; }
 @media (max-width: 760px) { .detail-grid { grid-template-columns: 1fr; } }
+
+/* ---------- public pages ---------- */
+.public { min-height: 100vh; display: flex; flex-direction: column; background: var(--bg); }
+.public-head { display: flex; gap: 12px; align-items: center; padding: 16px 20px; background: var(--ink); color: #fff; }
+.public-church { font: 600 17px/1.2 var(--serif); }
+.public-sub { font-size: 12px; color: #b9c2d8; }
+.public-main { flex: 1; width: 100%; max-width: 640px; margin: 0 auto; padding: 24px 16px 40px; }
+.public-title { font: 600 26px/1.2 var(--serif); margin: 4px 0 8px; }
+.public-cards { display: flex; flex-direction: column; gap: 12px; margin-top: 20px; }
+.public-card { display: flex; gap: 14px; align-items: center; background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 18px; color: var(--ink); box-shadow: var(--shadow); }
+.public-card:hover { text-decoration: none; border-color: var(--gold); }
+.public-card strong { display: block; font-size: 16px; margin-bottom: 2px; }
+.public-card .muted { display: block; }
+.public-card-icon { width: 44px; height: 44px; flex: none; border-radius: 12px; background: var(--gold-soft); color: var(--gold); display: grid; place-items: center; font-size: 20px; }
+.public-foot { text-align: center; font-size: 12px; color: var(--muted); padding: 16px; }
+.public-done { text-align: center; padding: 16px 0; }
+.public-tick { width: 64px; height: 64px; border-radius: 50%; background: var(--green-soft); color: var(--green); display: grid; place-items: center; font-size: 30px; margin: 0 auto 12px; }
+.public-when { font: 600 20px/1.4 var(--sans); margin: 8px 0; }
+.hp { position: absolute; left: -9999px; width: 1px; height: 1px; opacity: 0; }
+.seg { display: flex; background: var(--line-2); border-radius: 10px; padding: 3px; gap: 3px; }
+.seg button { flex: 1; border: 0; background: none; padding: 9px; border-radius: 8px; font: 500 14px var(--sans); color: var(--muted); cursor: pointer; }
+.seg button.on { background: #fff; color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+.public .slot { min-height: 56px; }
+
+/* ---------- QR posters ---------- */
+.poster { text-align: center; padding: 8px; }
+.poster-church { font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.poster-title { font: 600 24px/1.2 var(--serif); margin: 6px 0 12px; }
+.poster-qr { width: 220px; height: 220px; image-rendering: pixelated; }
+.poster-line { margin-top: 10px; }
+.poster-url { font-size: 12px; color: var(--muted); margin-top: 4px; word-break: break-all; }
+@media print {
+  body[data-print-poster] .content > *:not(.grid), body[data-print-poster] .grid > .card:last-child { display: none !important; }
+  body[data-print-poster] .poster-card { display: none !important; border: 0; }
+  body[data-print-poster="connect"] .poster-card:has(#poster-connect),
+  body[data-print-poster="prayer"] .poster-card:has(#poster-prayer),
+  body[data-print-poster="book"] .poster-card:has(#poster-book) { display: block !important; }
+  body[data-print-poster] .poster { padding-top: 60px; }
+  body[data-print-poster] .poster-church { font-size: 18px; }
+  body[data-print-poster] .poster-title { font-size: 40px; margin: 16px 0 28px; }
+  body[data-print-poster] .poster-qr { width: 420px; height: 420px; }
+  body[data-print-poster] .poster-line { font-size: 20px; margin-top: 24px; }
+  body[data-print-poster] .poster-url { font-size: 16px; }
+  body[data-print-poster] .detail-grid { display: block; }
+}

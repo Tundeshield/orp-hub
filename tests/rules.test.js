@@ -3,7 +3,7 @@
 import { readFileSync } from 'node:fs';
 import { afterAll, beforeAll, beforeEach, describe, it } from 'vitest';
 import { initializeTestEnvironment, assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
-import { doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, collection, query, where, writeBatch, Timestamp } from 'firebase/firestore';
+import { doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, collection, query, where, writeBatch, Timestamp, serverTimestamp } from 'firebase/firestore';
 
 let env;
 const USERS = {
@@ -263,5 +263,72 @@ describe('reports, tasks, audit', () => {
     await assertFails(updateDoc(doc(db('member'), 'audit/X'), { action: 'b' }));
     await assertFails(getDoc(doc(db('member'), 'audit/X')));
     await assertFails(deleteDoc(doc(db('admin'), 'audit/X')));
+  });
+});
+
+describe('public visitors (anonymous, no account)', () => {
+  const anon = (id) => env.authenticatedContext(id, { firebase: { sign_in_provider: 'anonymous' } }).firestore();
+  const enable = (data) => env.withSecurityRulesDisabled(async (ctx) => { await setDoc(doc(ctx.firestore(), 'settings/public'), data); });
+  async function slot() {
+    let s;
+    await env.withSecurityRulesDisabled(async (ctx) => { s = (await getDoc(doc(ctx.firestore(), 'slots/S1'))).data(); });
+    return s;
+  }
+  async function publicBook(d, id, apptId, extra = {}) {
+    const s = await slot();
+    const b = writeBatch(d);
+    b.set(doc(d, 'appointments', apptId), {
+      slotId: 'S1', start: s.start, end: s.end, bookedBy: id, attendeeUid: id, attendeeName: 'Visitor Name', phone: '08030000000',
+      email: '', purpose: 'Counsel', status: 'booked', source: 'public', ...extra,
+    });
+    b.update(doc(d, 'slots/S1'), { status: 'booked', appointmentId: apptId, bookedBy: id });
+    b.set(doc(d, 'throttle', id), { at: serverTimestamp() });
+    return b.commit();
+  }
+  function publicPrayer(d, id, content = 'Please pray for my family') {
+    const b = writeBatch(d);
+    b.set(doc(collection(d, 'prayers')), { kind: 'prayer', content, name: '', phone: '', confidential: true, anonymous: true, status: 'new', source: 'public', submittedBy: id });
+    b.set(doc(d, 'throttle', id), { at: serverTimestamp() });
+    return b.commit();
+  }
+
+  it('nothing is possible until the office switches it on', async () => {
+    await assertFails(getDocs(query(collection(anon('v1'), 'slots'), where('status', '==', 'open'))));
+    await assertFails(publicPrayer(anon('v1'), 'v1'));
+    await assertFails(publicBook(anon('v1'), 'v1', 'PA1'));
+  });
+  it('visitors can see open slots only, book one, and nothing else', async () => {
+    await enable({ bookingEnabled: true, prayerEnabled: false });
+    const d = anon('v1');
+    await assertSucceeds(getDocs(query(collection(d, 'slots'), where('status', '==', 'open'))));
+    await assertFails(getDocs(collection(d, 'slots')));
+    await assertFails(getDocs(collection(d, 'funds')));
+    await assertFails(getDocs(collection(d, 'users')));
+    await assertFails(getDocs(collection(d, 'appointments')));
+    await assertSucceeds(publicBook(d, 'v1', 'PA1'));
+    await assertSucceeds(getDoc(doc(d, 'appointments/PA1')));
+    await assertFails(getDoc(doc(anon('v2'), 'appointments/PA1')));
+    await assertFails(publicBook(anon('v2'), 'v2', 'PA2'));
+  });
+  it('bookings need a name and phone', async () => {
+    await enable({ bookingEnabled: true });
+    await assertFails(publicBook(anon('v1'), 'v1', 'PA1', { phone: '' }));
+    await assertFails(publicBook(anon('v1'), 'v1', 'PA1', { attendeeName: '' }));
+  });
+  it('prayer requests are accepted and throttled to one a minute', async () => {
+    await enable({ prayerEnabled: true });
+    const d = anon('v3');
+    await assertSucceeds(publicPrayer(d, 'v3'));
+    await assertFails(publicPrayer(d, 'v3', 'second one straight away'));
+    await assertFails(getDocs(collection(d, 'prayers')));
+    await assertFails(publicPrayer(anon('v4'), 'v4', 'x'.repeat(5000)));
+  });
+  it('visitors cannot create notifications, tasks or audit entries', async () => {
+    await enable({ bookingEnabled: true, prayerEnabled: true });
+    const d = anon('v5');
+    await assertFails(setDoc(doc(d, 'notifications/N'), { toUid: 'pastor', fromUid: 'v5', read: false }));
+    await assertFails(setDoc(doc(d, 'tasks/T'), { title: 'x', createdBy: 'v5', assigneeUid: 'pastor' }));
+    await assertFails(setDoc(doc(d, 'audit/A'), { action: 'x', actorUid: 'v5' }));
+    await assertFails(setDoc(doc(d, 'settings/public'), { bookingEnabled: true }));
   });
 });

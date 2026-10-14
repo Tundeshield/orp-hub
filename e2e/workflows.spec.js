@@ -202,7 +202,7 @@ test.describe('workflows', () => {
 
 test.describe('every page renders (visual pass)', () => {
   const pages = {
-    'pastor@orp.test': ['/', '/finance', '/finance?tab=requests', '/meetings?tab=diary', '/meetings?tab=availability', '/meetings?tab=notes', '/reports?tab=all', '/pastor', '/pastor?tab=followups', '/pastor?tab=prayer', '/pastor?tab=notes', '/tasks', '/notifications'],
+    'pastor@orp.test': ['/', '/finance', '/finance?tab=requests', '/meetings?tab=diary', '/meetings?tab=availability', '/meetings?tab=notes', '/reports?tab=all', '/pastor', '/pastor?tab=followups', '/pastor?tab=prayer', '/pastor?tab=notes', '/tasks', '/notifications', '/share'],
     'member@orp.test': ['/', '/finance', '/meetings?tab=book', '/pastor'],
     'youth@orp.test': ['/', '/reports', '/tasks'],
   };

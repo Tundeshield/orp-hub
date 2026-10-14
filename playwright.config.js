@@ -3,6 +3,7 @@ import { defineConfig, devices } from '@playwright/test';
 // End-to-end tests run against the Firebase emulators with seeded demo data (see CI workflow).
 export default defineConfig({
   testDir: 'e2e',
+  testMatch: ['workflows.spec.js', 'public.spec.js'],
   fullyParallel: false,
   workers: 1,
   retries: 0,

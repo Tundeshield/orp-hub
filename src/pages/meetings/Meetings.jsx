@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { collection, doc, serverTimestamp, Timestamp, updateDoc, writeBatch, deleteDoc, orderBy } from 'firebase/firestore';
 import { db } from '../../firebase.js';
 import { useAuth } from '../../AuthContext.jsx';
@@ -59,7 +59,8 @@ export default function Meetings() {
 
   return (
     <>
-      <PageHeader title="Meetings & appointments" subtitle="Book time with the Resident Pastor. Each slot can only be booked once." />
+      <PageHeader title="Meetings & appointments" subtitle="Book time with the Resident Pastor. Each slot can only be booked once."
+        actions={manager && <Link to="/share" className="btn btn-secondary">Public booking & QR codes</Link>} />
       <Tabs tabs={tabs} value={tab} onChange={setTab} />
       <ErrorNote error={slots.error || mine.error || diary.error} />
 
@@ -209,7 +210,7 @@ function AppointmentList({ rows, loading, mine, manager, onCancel, onReschedule 
               <li key={a.id} className="list-item">
                 <div className="list-main">
                   <div className="list-title">{fmtDate(a.start, { weekday: 'short' })}, {fmtTime(a.start)}–{fmtTime(a.end)} {!past && a.status === 'booked' && <span className="muted small">({relative(a.start)})</span>}</div>
-                  <div className="list-meta">{manager ? `${a.attendeeName}${a.phone ? ` · ${a.phone}` : ''}` : 'With the Resident Pastor'}{a.bookedByName && a.bookedByName !== a.attendeeName ? ` · booked by ${a.bookedByName}` : ''}</div>
+                  <div className="list-meta">{manager ? `${a.attendeeName}${a.phone ? ` · ${a.phone}` : ''}` : 'With the Resident Pastor'}{a.source === 'public' ? ' · ' : ''}{a.source === 'public' && <Badge tone="violet">online booking</Badge>}{a.source !== 'public' && a.bookedByName && a.bookedByName !== a.attendeeName ? ` · booked by ${a.bookedByName}` : ''}{a.email ? ` · ${a.email}` : ''}</div>
                   {a.purpose && <div className="small pre">{a.purpose}</div>}
                   {a.cancelReason && <div className="small muted">Reason: {a.cancelReason}</div>}
                 </div>

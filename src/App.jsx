@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { isConfigured } from './firebase.js';
 import { AuthProvider, useAuth } from './AuthContext.jsx';
 import { WorkProvider } from './WorkContext.jsx';
@@ -18,6 +18,8 @@ import Tasks from './pages/Tasks.jsx';
 import Notifications from './pages/Notifications.jsx';
 import Admin from './pages/admin/Admin.jsx';
 import Account from './pages/Account.jsx';
+import Share from './pages/Share.jsx';
+import Connect from './pages/public/Connect.jsx';
 
 function NotConfigured() {
   return (
@@ -32,8 +34,10 @@ function NotConfigured() {
 
 function Gate() {
   const { user, profile, loading } = useAuth();
+  const { pathname } = useLocation();
+  if (pathname === '/connect' || pathname.startsWith('/connect/')) return <Routes><Route path="/connect/*" element={<Connect />} /></Routes>;
   if (loading) return <Loading label="Opening Pastor's Desk…" />;
-  if (!user) return <Login />;
+  if (!user || user.isAnonymous) return <Login />;
   if (!profile || !profile.active || !(profile.roles || []).length) return <Pending />;
   return (
     <WorkProvider>
@@ -51,6 +55,7 @@ function Gate() {
           <Route path="notifications" element={<Notifications />} />
           <Route path="admin" element={<Admin />} />
           <Route path="account" element={<Account />} />
+          <Route path="share" element={<Share />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>

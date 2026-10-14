@@ -26,6 +26,19 @@ service cloud.firestore {
     function changed() { return request.resource.data.diff(resource.data).affectedKeys(); }
     function onlyChanged(keys) { return changed().hasOnly(keys); }
     function isMoney(v) { return v is int && v > 0 && v <= 100000000000000; }
+    // Public visitors use Firebase anonymous sign-in (no account, no profile).
+    function isAnon() { return signedIn() && request.auth.token.firebase.sign_in_provider == 'anonymous'; }
+    function publicOn(flag) {
+      return exists(/databases/$(database)/documents/settings/public)
+        && get(/databases/$(database)/documents/settings/public).data.get(flag, false) == true;
+    }
+    function shortText(v, max) { return v is string && v.size() <= max; }
+    // One public submission per visitor per minute: the batch must stamp throttle/{uid}.
+    function throttled() {
+      let p = /databases/$(database)/documents/throttle/$(request.auth.uid);
+      return getAfter(p).data.at == request.time
+        && (!exists(p) || get(p).data.at < request.time - duration.value(60, 's'));
+    }
     function timelineGrows() {
       return request.resource.data.timeline is list
         && request.resource.data.timeline.size() == resource.data.timeline.size() + 1;
@@ -61,6 +74,16 @@ service cloud.firestore {
             // an admin cannot remove their own admin role (avoids lock-out)
             && (userId != uid() || request.resource.data.roles.hasAny(['admin'])));
       allow delete: if false;
+    }
+
+    match /settings/public {
+      allow read: if signedIn();
+      allow write: if isDiaryManager();
+    }
+
+    match /throttle/{id} {
+      allow read: if false;
+      allow create, update: if signedIn() && id == uid() && request.resource.data.at == request.time;
     }
 
     match /ministries/{id} {
@@ -212,7 +235,7 @@ service cloud.firestore {
 
     // ---------- meetings ----------
     match /slots/{slotId} {
-      allow read: if active();
+      allow read: if active() || (isAnon() && publicOn('bookingEnabled') && resource.data.status == 'open');
       allow create: if isDiaryManager()
         && request.resource.data.status in ['open', 'blocked']
         && request.resource.data.appointmentId == null
@@ -220,7 +243,16 @@ service cloud.firestore {
         && request.resource.data.end is timestamp
         && request.resource.data.end > request.resource.data.start;
       allow delete: if isDiaryManager() && resource.data.status != 'booked';
-      allow update: if active() && (
+      allow update: if (
+        // a public visitor books an open future slot (with a new appointment in the same batch)
+        (isAnon() && publicOn('bookingEnabled')
+          && resource.data.status == 'open' && request.resource.data.status == 'booked'
+          && resource.data.start > request.time
+          && onlyChanged(['status', 'appointmentId', 'bookedBy', 'updatedAt'])
+          && request.resource.data.bookedBy == uid()
+          && getAfter(/databases/$(database)/documents/appointments/$(request.resource.data.appointmentId)).data.slotId == slotId
+          && !exists(/databases/$(database)/documents/appointments/$(request.resource.data.appointmentId)))
+      ) || active() && (
         // book an open slot (with a new appointment in the same batch)
         (resource.data.status == 'open' && request.resource.data.status == 'booked'
           && onlyChanged(['status', 'appointmentId', 'bookedBy', 'updatedAt'])
@@ -243,8 +275,14 @@ service cloud.firestore {
     }
 
     match /appointments/{apptId} {
-      allow read: if (active() && (resource.data.attendeeUid == uid() || resource.data.bookedBy == uid())) || isDiaryManager();
-      allow create: if active()
+      allow read: if (active() && (resource.data.attendeeUid == uid() || resource.data.bookedBy == uid())) || isDiaryManager()
+        || (isAnon() && resource.data.attendeeUid == uid());
+      allow create: if (active() || (isAnon() && publicOn('bookingEnabled') && throttled()
+            && request.resource.data.source == 'public'
+            && shortText(request.resource.data.attendeeName, 120) && request.resource.data.attendeeName.size() > 1
+            && shortText(request.resource.data.phone, 30) && request.resource.data.phone.size() >= 7
+            && shortText(request.resource.data.purpose, 1000)
+            && shortText(request.resource.data.email, 120)))
         && request.resource.data.bookedBy == uid()
         && (request.resource.data.attendeeUid == uid() || isDiaryManager())
         && request.resource.data.status == 'booked'
@@ -306,7 +344,12 @@ service cloud.firestore {
         || hasRole('pastor')
         || (hasRole('assistant') && resource.data.confidential == false)
         || (active() && resource.data.kind == 'testimony' && resource.data.status == 'shared');
-      allow create: if active() && request.resource.data.submittedBy == uid()
+      allow create: if (active() || (isAnon() && publicOn('prayerEnabled') && throttled()
+            && request.resource.data.source == 'public'
+            && request.resource.data.content is string && request.resource.data.content.size() > 2
+            && request.resource.data.content.size() <= 4000
+            && shortText(request.resource.data.name, 120) && shortText(request.resource.data.phone, 30)))
+        && request.resource.data.submittedBy == uid()
         && request.resource.data.status == 'new'
         && request.resource.data.kind in ['prayer', 'testimony'];
       allow update: if (hasRole('pastor') || (hasRole('assistant') && resource.data.confidential == false))

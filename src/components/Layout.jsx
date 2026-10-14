@@ -2,7 +2,7 @@ import { NavLink, Link, Outlet } from 'react-router-dom';
 import { useAuth } from '../AuthContext.jsx';
 import { useWork } from '../WorkContext.jsx';
 import { churchName } from '../firebase.js';
-import { ROLES, isAdmin, can } from '../lib/roles.js';
+import { ROLES, isAdmin, can, isDiaryManager } from '../lib/roles.js';
 
 export default function Layout() {
   const { profile, signOut } = useAuth();
@@ -17,6 +17,7 @@ export default function Layout() {
     { to: '/pastor', label: 'Pastor', icon: '✚', count: work.followupsDue.length + work.newPrayers.length },
     { to: '/tasks', label: 'Tasks', icon: '✓', count: work.openTasks.length },
   ];
+  if (isDiaryManager(profile)) items.push({ to: '/share', label: 'Public & QR', icon: '▣' });
   if (isAdmin(profile)) items.push({ to: '/admin', label: 'Admin', icon: '⚙', count: work.pendingUsers.length });
 
   return (

@@ -56,6 +56,7 @@ async function users() {
       ministryId: p.ministry || '', ministryName: p.ministry ? MINISTRIES[p.ministry] : '', createdAt: FieldValue.serverTimestamp(),
     });
   }
+  await db.doc('settings/public').set({ bookingEnabled: true, prayerEnabled: true, officePhone: '0803 555 0100', welcomeNote: '', bookingNote: '', prayerNote: '', bookingDays: 21 });
   await db.doc('meta/setup').set({ adminUid: U.admin.uid, at: FieldValue.serverTimestamp() });
   // one person waiting for activation
   let pend;
