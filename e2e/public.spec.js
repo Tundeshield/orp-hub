@@ -29,7 +29,7 @@ test('visitor books an appointment from the QR link', async ({ page }, info) => 
   await page.getByLabel('What would you like to talk about?').fill('Family counselling');
   await shot(page, info, 'public-book-form');
   await page.getByRole('button', { name: 'Confirm booking' }).click();
-  await expect(page.getByRole('heading', { name: /You're booked, Mrs/ })).toBeVisible();
+  await expect(page.getByRole('heading', { name: "You're booked" })).toBeVisible();
   await expect(page.getByRole('button', { name: /Add to my calendar/ })).toBeVisible();
   await shot(page, info, 'public-booked');
 });

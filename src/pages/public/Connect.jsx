@@ -176,7 +176,8 @@ function Book({ s }) {
       <Shell>
         <div className="public-done">
           <div className="public-tick">✓</div>
-          <h1 className="public-title">You're booked, {done.name.split(' ')[0]}</h1>
+          <h1 className="public-title">You're booked</h1>
+          <p className="muted" style={{ margin: 0 }}>{done.name}</p>
           <p className="public-when">{fmtDate(done.start, { weekday: 'long' })}<br />{fmtTime(done.start)} – {fmtTime(done.end)}</p>
           {done.location && <p>{done.location}</p>}
           <p className="muted small">Reference: {done.id.slice(0, 6).toUpperCase()}</p>
