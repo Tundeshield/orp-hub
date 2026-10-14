@@ -101,7 +101,7 @@ export default function ReportDetail() {
         <Card title={editable ? 'Your report' : 'Report'}>
           <div className="stack">
             {r.fields.map((f) => (
-              <Field key={f.key} label={f.label}>
+              <Field key={f.key} label={f.label} as={editable ? 'label' : 'div'}>
                 {editable ? (
                   f.type === 'textarea'
                     ? <textarea value={answers[f.key] ?? ''} onChange={(e) => { setDirty(true); setAnswers({ ...answers, [f.key]: e.target.value }); }} />

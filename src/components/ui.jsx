@@ -36,14 +36,14 @@ export function PageHeader({ title, subtitle, actions }) {
   );
 }
 
-export function Field({ label, hint, error, children, full }) {
+export function Field({ label, hint, error, children, full, as: Tag = 'label' }) {
   return (
-    <label className={`field ${full ? 'full' : ''}`}>
+    <Tag className={`field ${full ? 'full' : ''}`}>
       <span className="field-label">{label}</span>
       {children}
       {hint && !error && <span className="field-hint">{hint}</span>}
       {error && <span className="field-error">{error}</span>}
-    </label>
+    </Tag>
   );
 }
 

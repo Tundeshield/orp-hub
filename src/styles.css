@@ -73,7 +73,7 @@ p { margin: 0 0 .5em; }
 
 .page-head { display: flex; justify-content: space-between; gap: 16px; align-items: flex-end; margin-bottom: 20px; flex-wrap: wrap; }
 .page-head p { margin: 4px 0 0; }
-.page-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.page-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 
 /* ---------- cards ---------- */
 .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); min-width: 0; }
