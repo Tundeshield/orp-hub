@@ -8,6 +8,13 @@ import { addDays, fmtDate, fmtTime, isOverdue, relative, toDate } from '../lib/d
 import { Badge, Card, Empty, Loading, PageHeader, Stat } from '../components/ui.jsx';
 import { downloadICS } from './meetings/Meetings.jsx';
 
+const TITLES = /^(pastor|pst\.?|rev\.?|reverend|bro\.?|brother|sis\.?|sister|dcn\.?|deacon|deaconess|dr\.?|mr\.?|mrs\.?|miss|ms\.?|elder)$/i;
+function firstName(name) {
+  const parts = (name || '').trim().split(/\s+/);
+  if (parts.length > 1 && /^(pastor|pst\.?|rev\.?|reverend)$/i.test(parts[0])) return name;
+  return parts.find((p) => !TITLES.test(p)) || parts[0];
+}
+
 function greeting() {
   const h = new Date().getHours();
   return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
@@ -59,7 +66,7 @@ export default function Dashboard() {
 
   return (
     <>
-      <PageHeader title={`${greeting()}, ${profile.name.split(' ')[0]}`} subtitle={now.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} />
+      <PageHeader title={`${greeting()}, ${firstName(profile.name)}`} subtitle={now.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} />
 
       {soon.length > 0 && (
         <div className="info-note" style={{ marginBottom: 16 }}>
