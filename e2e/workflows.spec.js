@@ -5,7 +5,7 @@ import { login, logout, shot, dialog } from './helpers.js';
 test.describe.configure({ mode: 'serial' });
 
 test.describe('workflows', () => {
-  test.skip(({}, info) => info.project.name !== 'desktop', 'workflows run on desktop only');
+  test.beforeEach(({}, info) => { test.skip(info.project.name !== 'desktop', 'workflows run on desktop only'); });
 
   test('pastor sees the approval inbox and approves a request', async ({ page }, info) => {
     await login(page, 'pastor@orp.test');
