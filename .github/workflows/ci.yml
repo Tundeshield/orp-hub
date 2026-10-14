@@ -50,7 +50,8 @@ jobs:
       - name: Publish screenshots to the ci-screenshots branch
         if: always() && github.event_name != 'pull_request'
         run: |
-          [ -d e2e-screenshots ] || exit 0
+          mkdir -p e2e-screenshots/failures
+          find test-results -name '*.png' 2>/dev/null | while read f; do cp "$f" "e2e-screenshots/failures/$(echo "$f" | tr '/' '_')"; done
           cd e2e-screenshots
           git init -q -b ci-screenshots
           git config user.name "github-actions"

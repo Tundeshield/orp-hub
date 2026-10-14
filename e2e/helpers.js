@@ -3,6 +3,10 @@ import { expect } from '@playwright/test';
 export const PASSWORD = 'Password123!';
 
 export async function login(page, email) {
+  if (!page.__logging) {
+    page.__logging = true;
+    page.on('console', (m) => { if (['error', 'warning'].includes(m.type())) console.log(`[browser ${m.type()}] ${m.text()}`); });
+  }
   await page.goto('/');
   await page.getByLabel('Email').fill(email);
   await page.getByLabel('Password').fill(PASSWORD);
