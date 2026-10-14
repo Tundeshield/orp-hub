@@ -1,11 +1,12 @@
-import { runTransaction, doc, collection, serverTimestamp, writeBatch, Timestamp } from 'firebase/firestore';
+import { runTransaction, doc, serverTimestamp, writeBatch, Timestamp } from 'firebase/firestore';
 import { db } from '../firebase.js';
 import { applyLedger, TX_TYPES } from './finance.js';
 import { formatNGN } from './money.js';
 import { timelineEntry, addNotify } from './db.js';
+import { bcol, bdoc } from './db.js';
 
 function auditIn(tx, profile, action, entityType, entityId, details) {
-  tx.set(doc(collection(db, 'audit')), {
+  tx.set(doc(bcol('audit')), {
     action, entityType, entityId, details: String(details || ''),
     actorUid: profile.uid, actorName: profile.name, at: serverTimestamp(),
   });
@@ -13,20 +14,20 @@ function auditIn(tx, profile, action, entityType, entityId, details) {
 
 function notifyIn(tx, profile, toUid, title, body, link) {
   if (!toUid || toUid === profile.uid) return;
-  tx.set(doc(collection(db, 'notifications')), {
+  tx.set(doc(bcol('notifications')), {
     toUid, fromUid: profile.uid, fromName: profile.name, title, body: body || '', link: link || '/', read: false, createdAt: serverTimestamp(),
   });
 }
 
 export async function createFund(profile, { name, description }) {
-  const ref = doc(collection(db, 'funds'));
+  const ref = doc(bcol('funds'));
   const batch = writeBatch(db);
   batch.set(ref, {
     name: name.trim(), description: (description || '').trim(), active: true,
     allocated: 0, committed: 0, paid: 0, lastTxId: null,
     createdBy: profile.uid, createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
   });
-  batch.set(doc(collection(db, 'audit')), {
+  batch.set(doc(bcol('audit')), {
     action: 'fund.created', entityType: 'fund', entityId: ref.id, details: name,
     actorUid: profile.uid, actorName: profile.name, at: serverTimestamp(),
   });
@@ -40,15 +41,15 @@ export async function createFund(profile, { name, description }) {
  * extras: { date, method, reference, note, financeUids, requesterNote }
  */
 export async function postLedger(profile, type, { fundId, requestId = null, amount, date, method = '', reference = '', note = '', notifyUids = [] }) {
-  const txRef = doc(collection(db, 'transactions'));
+  const txRef = doc(bcol('transactions'));
   await runTransaction(db, async (t) => {
-    const fundRef = doc(db, 'funds', fundId);
+    const fundRef = bdoc('funds', fundId);
     const fundSnap = await t.get(fundRef);
     if (!fundSnap.exists()) throw new Error('Fund not found.');
     const fund = fundSnap.data();
     let req = null; let reqRef = null;
     if (requestId) {
-      reqRef = doc(db, 'requests', requestId);
+      reqRef = bdoc('requests', requestId);
       const reqSnap = await t.get(reqRef);
       if (!reqSnap.exists()) throw new Error('Request not found.');
       req = reqSnap.data();
@@ -89,7 +90,7 @@ export async function postLedger(profile, type, { fundId, requestId = null, amou
 }
 
 export async function submitRequest(profile, data, pastorUids) {
-  const ref = doc(collection(db, 'requests'));
+  const ref = doc(bcol('requests'));
   const batch = writeBatch(db);
   batch.set(ref, {
     title: data.title.trim(), description: data.description.trim(), category: data.category,
@@ -101,7 +102,7 @@ export async function submitRequest(profile, data, pastorUids) {
     decisionNote: '', timeline: [timelineEntry(profile, 'Submitted')],
     createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
   });
-  batch.set(doc(collection(db, 'audit')), {
+  batch.set(doc(bcol('audit')), {
     action: 'request.submitted', entityType: 'request', entityId: ref.id,
     details: `${data.title} — ${formatNGN(data.amount)}`, actorUid: profile.uid, actorName: profile.name, at: serverTimestamp(),
   });
@@ -113,11 +114,11 @@ export async function submitRequest(profile, data, pastorUids) {
 export async function updateRequestByRequester(profile, req, changes, action, pastorUids = []) {
   const { note, ...patch } = changes;
   const batch = writeBatch(db);
-  batch.update(doc(db, 'requests', req.id), {
+  batch.update(bdoc('requests', req.id), {
     ...patch, updatedAt: serverTimestamp(),
     timeline: [...(req.timeline || []), timelineEntry(profile, action, note)],
   });
-  batch.set(doc(collection(db, 'audit')), {
+  batch.set(doc(bcol('audit')), {
     action: `request.${patch.status === 'cancelled' ? 'cancelled' : 'updated'}`, entityType: 'request', entityId: req.id,
     details: action, actorUid: profile.uid, actorName: profile.name, at: serverTimestamp(),
   });
@@ -130,11 +131,11 @@ export async function updateRequestByRequester(profile, req, changes, action, pa
 export async function pastorDecision(profile, req, status, note) {
   const batch = writeBatch(db);
   const label = status === 'rejected' ? 'Rejected' : 'Clarification requested';
-  batch.update(doc(db, 'requests', req.id), {
+  batch.update(bdoc('requests', req.id), {
     status, decisionNote: note, decidedBy: profile.uid, decidedByName: profile.name, decidedAt: serverTimestamp(),
     updatedAt: serverTimestamp(), timeline: [...(req.timeline || []), timelineEntry(profile, label, note)],
   });
-  batch.set(doc(collection(db, 'audit')), {
+  batch.set(doc(bcol('audit')), {
     action: `request.${status}`, entityType: 'request', entityId: req.id, details: note,
     actorUid: profile.uid, actorName: profile.name, at: serverTimestamp(),
   });
@@ -144,9 +145,9 @@ export async function pastorDecision(profile, req, status, note) {
 
 export async function recordReconciliation(profile, data) {
   const batch = writeBatch(db);
-  const ref = doc(collection(db, 'reconciliations'));
+  const ref = doc(bcol('reconciliations'));
   batch.set(ref, { ...data, createdBy: profile.uid, createdByName: profile.name, createdAt: serverTimestamp() });
-  batch.set(doc(collection(db, 'audit')), {
+  batch.set(doc(bcol('audit')), {
     action: 'reconciliation.recorded', entityType: 'reconciliation', entityId: ref.id,
     details: `${data.scope}: statement ${formatNGN(data.statementBalance)} vs records ${formatNGN(data.bookBalance)}`,
     actorUid: profile.uid, actorName: profile.name, at: serverTimestamp(),

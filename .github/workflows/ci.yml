@@ -14,8 +14,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 20
           cache: npm
@@ -59,3 +59,32 @@ jobs:
           echo "Screenshots from ${{ github.sha }} (${{ job.status }})" > README.md
           git add -A && git commit -qm "Screenshots for ${{ github.sha }}"
           git push -qf "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" ci-screenshots
+
+  # Publishes firestore.rules to Firebase after every test passes on main.
+  # Needs the FIREBASE_SERVICE_ACCOUNT repository secret (a Firebase service-account JSON key).
+  deploy-rules:
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Deploy Firestore security rules
+        env:
+          SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          if [ -z "$SA" ]; then
+            echo "::warning::FIREBASE_SERVICE_ACCOUNT secret is not set, so the rules were NOT published. Add it, or paste firestore.rules into the Firebase console."
+            exit 0
+          fi
+          printf '%s' "$SA" > "$RUNNER_TEMP/sa.json"
+          export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/sa.json"
+          PROJECT=$(node -e "console.log(JSON.parse(require('fs').readFileSync(process.env.GOOGLE_APPLICATION_CREDENTIALS,'utf8')).project_id)")
+          npx firebase deploy --only firestore:rules --project "$PROJECT" --non-interactive
+          echo "::notice::Firestore rules published to $PROJECT"
+          rm -f "$RUNNER_TEMP/sa.json"

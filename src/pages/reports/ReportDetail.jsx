@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { doc, serverTimestamp, writeBatch } from 'firebase/firestore';
+import { serverTimestamp, writeBatch } from 'firebase/firestore';
 import { db } from '../../firebase.js';
 import { useAuth } from '../../AuthContext.jsx';
 import { useDoc, addNotify, addAudit, timelineEntry } from '../../lib/db.js';
@@ -10,6 +10,7 @@ import { fmtDate, fmtDateTime, relative } from '../../lib/dates.js';
 import { Badge, Button, Card, Empty, ErrorNote, Field, Loading, Modal, PageHeader, useAction } from '../../components/ui.jsx';
 import { TaskForm } from '../Tasks.jsx';
 import { reportState } from './Reports.jsx';
+import { bdoc } from '../../lib/db.js';
 
 export default function ReportDetail() {
   const { id } = useParams();
@@ -59,7 +60,7 @@ export default function ReportDetail() {
         for (const u of reviewerUids) addNotify(batch, profile, u, `Report submitted: ${r.ministryName}`, `${r.templateName} · ${r.period}`, `/reports/${r.id}`);
         addAudit(batch, profile, 'report.submitted', 'report', r.id, `${r.templateName} — ${r.ministryName} — ${r.period}`);
       }
-      batch.update(doc(db, 'reports', r.id), patch);
+      batch.update(bdoc('reports', r.id), patch);
       await batch.commit();
     }, submit ? 'Report submitted' : 'Draft saved');
     if (ok) setDirty(false);
@@ -69,7 +70,7 @@ export default function ReportDetail() {
     if (status === 'revision' && !note.trim()) return review.setError('Say what needs to be revised.');
     const ok = await review.run(async () => {
       const batch = writeBatch(db);
-      batch.update(doc(db, 'reports', r.id), {
+      batch.update(bdoc('reports', r.id), {
         status, reviewerNote: note.trim(), reviewedAt: serverTimestamp(), reviewedBy: profile.uid, reviewedByName: profile.name,
         updatedAt: serverTimestamp(), timeline: [...(r.timeline || []), timelineEntry(profile, status === 'reviewed' ? 'Reviewed' : 'Revision requested', note.trim())],
       });

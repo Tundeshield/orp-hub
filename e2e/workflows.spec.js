@@ -189,14 +189,35 @@ test.describe('workflows', () => {
     await shot(page, info, 'admin-audit');
   });
 
-  test('a brand new sign-up waits for activation', async ({ page }) => {
+  test('branches are separate; the super admin can switch between them', async ({ page }) => {
+    await login(page, 'abeokuta.pastor@orp.test');
+    await expect(page.locator('.topbar')).toContainText('Abeokuta');
+    await page.goto('/finance');
+    await expect(page.getByText('No funds yet')).toBeVisible();
+    await page.goto('/meetings?tab=diary');
+    await expect(page.getByText('Tobi Adewale')).toHaveCount(0);
+    await logout(page);
+    await login(page, 'admin@orp.test');
+    await page.locator('select.branch-switch').selectOption('abeokuta');
+    await expect(page.locator('select.branch-switch')).toHaveValue('abeokuta');
+    await page.goto('/admin');
+    await expect(page.locator('.list-item', { hasText: 'Pastor Deji Ogunleye' })).toBeVisible();
+    await expect(page.locator('.list-item', { hasText: 'Tobi Adewale' })).toHaveCount(0);
+    await page.locator('select.branch-switch').selectOption('ijebu-ode');
+    await expect(page.locator('.list-item', { hasText: 'Tobi Adewale' })).toBeVisible();
+  });
+
+  test('a brand new sign-up chooses a branch and waits for activation', async ({ page }) => {
     await page.goto('/');
     await page.getByRole('button', { name: 'Create an account' }).click();
     await page.getByLabel('Full name').fill('Test Volunteer');
     await page.getByLabel('Email').fill(`vol${Date.now()}@orp.test`);
     await page.getByLabel('Password').fill('Password123!');
     await page.getByRole('button', { name: 'Create account' }).click();
+    await expect(page.getByRole('heading', { name: 'Which branch are you in?' })).toBeVisible();
+    await page.getByText('The Elevation Church · Abeokuta').click();
     await expect(page.getByRole('heading', { name: 'Waiting for activation' })).toBeVisible();
+    await expect(page.getByText(/administrator of The Elevation Church · Abeokuta/)).toBeVisible();
   });
 });
 

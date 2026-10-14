@@ -6,9 +6,22 @@ import { db } from '../firebase.js';
 
 export { collection, doc, query, where, serverTimestamp, writeBatch, Timestamp, db };
 
-export const col = (name) => collection(db, name);
-export const ref = (name, id) => doc(db, name, id);
-export const newId = (name) => doc(collection(db, name)).id;
+// ---- branch scoping ----
+// All church data lives under branches/{branchId}/... The current branch is set once by
+// the auth/branch provider (or the public page) before any branch data is read.
+let currentBranch = null;
+export function setCurrentBranch(id) { currentBranch = id; }
+export function getCurrentBranch() { return currentBranch; }
+function need() {
+  if (!currentBranch) throw new Error('No branch selected.');
+  return currentBranch;
+}
+export const bcol = (name) => collection(db, 'branches', need(), name);
+export const bdoc = (name, id) => (id === undefined ? doc(bcol(name)) : doc(db, 'branches', need(), name, id));
+
+export const col = bcol;
+export const ref = bdoc;
+export const newId = (name) => doc(bcol(name)).id;
 
 function mapSnap(snap) {
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
@@ -32,7 +45,7 @@ export function useDoc(name, id) {
   const [state, setState] = useState({ data: null, loading: true, error: null });
   useEffect(() => {
     if (!id) { setState({ data: null, loading: false, error: null }); return undefined; }
-    return onSnapshot(doc(db, name, id),
+    return onSnapshot(bdoc(name, id),
       (snap) => setState({ data: snap.exists() ? { id: snap.id, ...snap.data() } : null, loading: false, error: null }),
       (error) => { console.error(error); setState({ data: null, loading: false, error }); });
   }, [name, id]);
@@ -46,7 +59,7 @@ export function timelineEntry(profile, action, note = '') {
 
 // Adds an audit-log entry to a batch.
 export function addAudit(batch, profile, action, entityType, entityId, details = '') {
-  batch.set(doc(collection(db, 'audit')), {
+  batch.set(doc(bcol('audit')), {
     action, entityType, entityId, details: String(details || ''),
     actorUid: profile.uid, actorName: profile.name, at: serverTimestamp(),
   });
@@ -55,7 +68,7 @@ export function addAudit(batch, profile, action, entityType, entityId, details =
 // Adds an in-app notification to a batch (skips notifying yourself).
 export function addNotify(batch, profile, toUid, title, body = '', link = '/') {
   if (!toUid || toUid === profile.uid) return;
-  batch.set(doc(collection(db, 'notifications')), {
+  batch.set(doc(bcol('notifications')), {
     toUid, fromUid: profile.uid, fromName: profile.name, title, body, link, read: false, createdAt: serverTimestamp(),
   });
 }

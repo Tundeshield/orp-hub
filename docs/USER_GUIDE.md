@@ -88,12 +88,28 @@ ORP Hub will not let you pay more than was approved.
 
 ---
 
+## Public booking and prayer requests (QR codes)
+
+Anyone can book time with the Pastor or send a prayer request or testimony without an account, from the branch's public page (e.g. `/connect/ijebu-ode`).
+
+1. **Meetings → Availability:** publish the Pastor's open times. Visitors can only book those.
+2. **Public & QR** (pastor, assistant, admin): switch booking and/or prayer requests on, add the office phone number, and save.
+3. Download or print the QR posters (Connect, Prayer points, Book the Pastor) for the noticeboard, bulletin or projector.
+
+Online bookings appear in the diary marked **online booking** with the visitor's phone number; prayer requests appear under Pastor → Prayer & testimonies marked **via QR / public page**. Each visitor can send at most one item a minute.
+
 ## For the administrator
 
-- New people sign up themselves; they wait on a "Waiting for activation" screen. Open **Admin → People & roles**, click the person, tick their role(s) and **Activate**.
+- New people sign up themselves and choose their branch; they wait on a "Waiting for activation" screen. Open **Admin → People & roles**, click the person, tick their role(s) and **Activate**.
 - To remove access, untick **Account active**.
 - **Admin → Ministries**: set each ministry's leader (they receive report requests).
 - **Admin → Audit history**: who did what, when. It can't be edited.
 - **Admin → Backup**: download a backup at least monthly and keep it somewhere safe. See [Backup & recovery](BACKUP_AND_RECOVERY.md).
 
 Forgot password? Use **Forgot password?** on the sign-in page.
+
+### Branches (super admin)
+
+- **Admin → Branches → Add a branch:** name, location and a short code (used in the public link, e.g. `abeokuta`). You become its administrator.
+- Switch branches with the selector at the top of the screen. Everything you see — finance, diary, reports, people — belongs to the selected branch only.
+- Invite the branch's pastor, assistant and finance officer to sign up and choose that branch, then give them roles in **People & roles**. A branch admin can manage their own branch but not others.

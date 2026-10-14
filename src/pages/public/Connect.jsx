@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Link, Route, Routes, useNavigate } from 'react-router-dom';
+import { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { Link, Route, Routes, useNavigate, useParams } from 'react-router-dom';
 import { signInAnonymously } from 'firebase/auth';
 import { collection, doc, getDoc, getDocs, query, serverTimestamp, where, writeBatch } from 'firebase/firestore';
 import { auth, db, churchName } from '../../firebase.js';
@@ -8,6 +8,7 @@ import { fmtDate, fmtTime, fromInputDate, relative, toDate, toInputDate } from '
 import { appointmentICS } from '../../lib/ics.js';
 import { download } from '../../lib/csv.js';
 import { Button, ErrorNote, Field, Loading } from '../../components/ui.jsx';
+import { bcol, bdoc, setCurrentBranch } from '../../lib/db.js';
 
 // Public "Connect" pages: no account needed. Visitors are signed in anonymously so
 // the security rules can identify and throttle them; they can only book open slots
@@ -22,29 +23,34 @@ function useVisitor() {
   return { ready: !!user, error };
 }
 
-function useSettings(ready) {
-  const [s, setS] = useState({ loading: true, data: null });
+const BranchCtx = createContext({ id: '', name: churchName, base: '/connect' });
+const useBranch = () => useContext(BranchCtx);
+
+function useBranchInfo(ready, branchId) {
+  const [s, setS] = useState({ loading: true, branch: null, settings: {} });
   useEffect(() => {
-    if (!ready) return;
-    getDoc(doc(db, 'settings', 'public'))
-      .then((snap) => setS({ loading: false, data: snap.exists() ? snap.data() : {} }))
-      .catch((e) => { console.error(e); setS({ loading: false, data: {} }); });
-  }, [ready]);
+    if (!ready || !branchId) return;
+    setS({ loading: true, branch: null, settings: {} });
+    Promise.all([getDoc(doc(db, 'branches', branchId)), getDoc(doc(db, 'branches', branchId, 'settings', 'public')).catch(() => null)])
+      .then(([b, st]) => setS({ loading: false, branch: b.exists() ? { id: b.id, ...b.data() } : null, settings: st?.exists() ? st.data() : {} }))
+      .catch((e) => { console.error(e); setS({ loading: false, branch: null, settings: {} }); });
+  }, [ready, branchId]);
   return s;
 }
 
 function Shell({ children, back }) {
+  const b = useBranch();
   return (
     <div className="public">
       <header className="public-head">
         <div className="brand-mark">✝</div>
         <div>
-          <div className="public-church">{churchName}</div>
+          <div className="public-church">{b.name}</div>
           <div className="public-sub">Office of the Resident Pastor</div>
         </div>
       </header>
       <main className="public-main">
-        {back && <p className="small"><Link to="/connect">← Back</Link></p>}
+        {back && <p className="small"><Link to={b.base}>← Back</Link></p>}
         {children}
       </main>
       <footer className="public-foot">Pastor&rsquo;s Desk · {churchName}</footer>
@@ -63,22 +69,66 @@ function friendly(e) {
 }
 
 export default function Connect() {
-  const { ready, error } = useVisitor();
-  const settings = useSettings(ready);
-  if (error) return <Shell><div className="error-note">This page couldn't start. Please refresh, or contact the church office.</div></Shell>;
-  if (!ready || settings.loading) return <Shell><Loading /></Shell>;
-  const s = settings.data || {};
   return (
     <Routes>
-      <Route index element={<Home s={s} />} />
-      <Route path="book" element={<Book s={s} />} />
-      <Route path="prayer" element={<Prayer s={s} />} />
-      <Route path="*" element={<Home s={s} />} />
+      <Route index element={<Chooser />} />
+      <Route path=":branchId/*" element={<BranchConnect />} />
     </Routes>
   );
 }
 
+function Chooser() {
+  const { ready, error } = useVisitor();
+  const [branches, setBranches] = useState(null);
+  useEffect(() => {
+    if (!ready) return;
+    getDocs(collection(db, 'branches')).then((snap) => setBranches(snap.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => a.name.localeCompare(b.name))))
+      .catch((e) => { console.error(e); setBranches([]); });
+  }, [ready]);
+  if (error) return <Shell><div className="error-note">This page couldn't start. Please refresh, or contact the church office.</div></Shell>;
+  if (!branches) return <Shell><Loading /></Shell>;
+  return (
+    <Shell>
+      <h1 className="public-title">Choose your branch</h1>
+      <div className="public-cards">
+        {branches.map((b) => (
+          <Link key={b.id} to={`/connect/${b.id}`} className="public-card">
+            <span className="public-card-icon">⌂</span>
+            <span><strong>{b.name}</strong>{b.location && <span className="muted small">{b.location}</span>}</span>
+          </Link>
+        ))}
+        {!branches.length && <div className="info-note">Nothing here yet.</div>}
+      </div>
+    </Shell>
+  );
+}
+
+function BranchConnect() {
+  const { branchId } = useParams();
+  const { ready, error } = useVisitor();
+  setCurrentBranch(branchId);
+  const info = useBranchInfo(ready, branchId);
+  const ctx = useMemo(() => ({ id: branchId, name: info.branch?.name || churchName, base: `/connect/${branchId}` }), [branchId, info.branch]);
+  let body;
+  if (error) body = <Shell><div className="error-note">This page couldn't start. Please refresh, or contact the church office.</div></Shell>;
+  else if (!ready || info.loading) body = <Shell><Loading /></Shell>;
+  else if (!info.branch) body = <Shell><div className="info-note">We couldn't find that branch. <Link to="/connect">See all branches</Link></div></Shell>;
+  else {
+    const s = info.settings;
+    body = (
+      <Routes>
+        <Route index element={<Home s={s} />} />
+        <Route path="book" element={<Book s={s} />} />
+        <Route path="prayer" element={<Prayer s={s} />} />
+        <Route path="*" element={<Home s={s} />} />
+      </Routes>
+    );
+  }
+  return <BranchCtx.Provider value={ctx}>{body}</BranchCtx.Provider>;
+}
+
 function Home({ s }) {
+  const b = useBranch();
   const nothing = !s.bookingEnabled && !s.prayerEnabled;
   return (
     <Shell>
@@ -87,19 +137,19 @@ function Home({ s }) {
       {nothing && <div className="info-note" style={{ marginTop: 16 }}>Online booking and prayer requests are not open right now. Please contact the church office{s.officePhone ? ` on ${s.officePhone}` : ''}.</div>}
       <div className="public-cards">
         {s.bookingEnabled && (
-          <Link to="/connect/book" className="public-card">
+          <Link to={`${b.base}/book`} className="public-card">
             <span className="public-card-icon">◷</span>
             <span><strong>Book time with the Pastor</strong><span className="muted small">Choose an available time for counselling, prayer or a meeting.</span></span>
           </Link>
         )}
         {s.prayerEnabled && (
-          <Link to="/connect/prayer?kind=prayer" className="public-card">
+          <Link to={`${b.base}/prayer?kind=prayer`} className="public-card">
             <span className="public-card-icon">✚</span>
             <span><strong>Send a prayer request</strong><span className="muted small">The Pastor and the prayer team will pray with you.</span></span>
           </Link>
         )}
         {s.prayerEnabled && (
-          <Link to="/connect/prayer?kind=testimony" className="public-card">
+          <Link to={`${b.base}/prayer?kind=testimony`} className="public-card">
             <span className="public-card-icon">★</span>
             <span><strong>Share a testimony</strong><span className="muted small">Tell us what God has done.</span></span>
           </Link>
@@ -111,6 +161,7 @@ function Home({ s }) {
 }
 
 function Book({ s }) {
+  const b = useBranch();
   const { user } = useAuth();
   const nav = useNavigate();
   const [slots, setSlots] = useState({ loading: true, data: [], error: null });
@@ -123,7 +174,7 @@ function Book({ s }) {
   async function load() {
     setSlots((x) => ({ ...x, loading: true }));
     try {
-      const snap = await getDocs(query(collection(db, 'slots'), where('status', '==', 'open')));
+      const snap = await getDocs(query(bcol('slots'), where('status', '==', 'open')));
       const now = new Date(Date.now() + 30 * 60000); // at least 30 minutes' notice
       const horizon = new Date(Date.now() + (Number(s.bookingDays) || 21) * 86400000);
       const data = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
@@ -152,14 +203,14 @@ function Book({ s }) {
     setBusy(true); setError(null);
     try {
       const batch = writeBatch(db);
-      const appt = doc(collection(db, 'appointments'));
+      const appt = doc(bcol('appointments'));
       batch.set(appt, {
         slotId: picked.id, start: picked.start, end: picked.end, location: picked.location || '',
         bookedBy: user.uid, bookedByName: 'Online booking', attendeeUid: user.uid,
         attendeeName: f.name.trim(), phone: f.phone.trim(), email: f.email.trim(), purpose: f.purpose.trim(),
         status: 'booked', source: 'public', rescheduledFrom: null, createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
       });
-      batch.update(doc(db, 'slots', picked.id), { status: 'booked', appointmentId: appt.id, bookedBy: user.uid, updatedAt: serverTimestamp() });
+      batch.update(bdoc('slots', picked.id), { status: 'booked', appointmentId: appt.id, bookedBy: user.uid, updatedAt: serverTimestamp() });
       stampThrottle(batch, user.uid);
       await batch.commit();
       setDone({ id: appt.id, ...picked, name: f.name.trim() });
@@ -184,9 +235,9 @@ function Book({ s }) {
           <p className="muted">{s.bookingNote || 'Please arrive a few minutes early. If you can no longer make it, kindly call the church office so someone else can have the time.'}</p>
           <div className="row" style={{ justifyContent: 'center', marginTop: 16 }}>
             <Button onClick={() => download(`appointment-${toInputDate(done.start)}.ics`, appointmentICS({
-              id: done.id, title: `Appointment with the Resident Pastor — ${churchName}`, description: 'Booked via Pastor\'s Desk', start: done.start, end: done.end, location: done.location,
+              id: done.id, title: `Appointment with the Resident Pastor — ${b.name}`, description: 'Booked via Pastor\'s Desk', start: done.start, end: done.end, location: done.location,
             }), 'text/calendar;charset=utf-8')}>📅 Add to my calendar</Button>
-            <Button variant="secondary" onClick={() => nav('/connect')}>Done</Button>
+            <Button variant="secondary" onClick={() => nav(b.base)}>Done</Button>
           </div>
           {s.officePhone && <p className="small" style={{ marginTop: 16 }}>Church office: <a href={`tel:${s.officePhone.replace(/\s/g, '')}`}>{s.officePhone}</a></p>}
         </div>
@@ -233,6 +284,7 @@ function Book({ s }) {
 }
 
 function Prayer({ s }) {
+  const b = useBranch();
   const { user } = useAuth();
   const nav = useNavigate();
   const initialKind = new URLSearchParams(window.location.search).get('kind') === 'testimony' ? 'testimony' : 'prayer';
@@ -250,7 +302,7 @@ function Prayer({ s }) {
     setBusy(true); setError(null);
     try {
       const batch = writeBatch(db);
-      batch.set(doc(collection(db, 'prayers')), {
+      batch.set(doc(bcol('prayers')), {
         kind: f.kind, content: f.content.trim(), name: f.anonymous ? '' : f.name.trim(), phone: f.phone.trim(),
         confidential: f.confidential, anonymous: f.anonymous || !f.name.trim(), status: 'new', source: 'public',
         submittedBy: user.uid, createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
@@ -270,7 +322,7 @@ function Prayer({ s }) {
           <p className="muted">{s.prayerNote || (f.kind === 'testimony' ? 'Your testimony has been received by the Pastor\'s office. God is faithful!' : 'Your request has been received by the Pastor\'s office. "The prayer of a righteous person is powerful and effective." — James 5:16')}</p>
           <div className="row" style={{ justifyContent: 'center', marginTop: 16 }}>
             <Button variant="secondary" onClick={() => { setDone(false); setF({ ...f, content: '' }); }}>Send another</Button>
-            <Button onClick={() => nav('/connect')}>Done</Button>
+            <Button onClick={() => nav(b.base)}>Done</Button>
           </div>
         </div>
       </Shell>

@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { collection, doc, serverTimestamp, Timestamp, writeBatch, updateDoc, deleteDoc } from 'firebase/firestore';
+import { doc, serverTimestamp, Timestamp, writeBatch, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../../firebase.js';
 import { useAuth } from '../../AuthContext.jsx';
 import { col, query, where, useLive, addNotify, addAudit, timelineEntry } from '../../lib/db.js';
@@ -10,6 +10,7 @@ import { fmtDate, fromInputDate, isOverdue, toDate, toInputDate, relative } from
 import { consolidate, STANDARD_TEMPLATES } from '../../lib/reportTemplates.js';
 import { toCSV, download } from '../../lib/csv.js';
 import { Badge, Button, Card, Empty, ErrorNote, Field, Loading, Modal, PageHeader, Stat, Tabs, useAction } from '../../components/ui.jsx';
+import { bcol, bdoc } from '../../lib/db.js';
 
 export function reportState(r) {
   if (['pending', 'revision'].includes(r.status) && isOverdue(r.dueDate)) return 'overdue';
@@ -142,7 +143,7 @@ function RequestReportsModal({ open, onClose, templates }) {
       for (const mid of selectedIds) {
         const m = withLeader.find((x) => x.id === mid);
         const leader = users.find((u) => u.uid === m.leaderUid);
-        const ref = doc(collection(db, 'reports'));
+        const ref = doc(bcol('reports'));
         batch.set(ref, {
           templateId: t.id, templateName: t.name, fields: t.fields, period: f.period.trim(), dueDate: due,
           ministryId: m.id, ministryName: m.name, leaderUid: m.leaderUid, leaderName: leader?.name || '',
@@ -254,7 +255,7 @@ function Templates({ templates }) {
   async function install() {
     await run(async () => {
       const batch = writeBatch(db);
-      missing.forEach((t) => batch.set(doc(collection(db, 'reportTemplates')), { ...t, active: true, createdBy: profile.uid, createdAt: serverTimestamp() }));
+      missing.forEach((t) => batch.set(doc(bcol('reportTemplates')), { ...t, active: true, createdBy: profile.uid, createdAt: serverTimestamp() }));
       await batch.commit();
     }, 'Standard templates installed');
   }
@@ -291,14 +292,14 @@ function TemplateModal({ t, onClose }) {
     const fields = f.fields.filter((x) => x.label.trim()).map((x, i) => ({ key: x.key || `f${i}_${Date.now()}`, label: x.label.trim(), type: x.type }));
     if (!f.name.trim() || !fields.length) return setError('A template needs a name and at least one question.');
     const data = { name: f.name.trim(), description: (f.description || '').trim(), frequency: f.frequency, fields, active: f.active !== false, updatedAt: serverTimestamp() };
-    const ok = await run(() => (t.id ? updateDoc(doc(db, 'reportTemplates', t.id), data)
-      : writeBatch(db).set(doc(collection(db, 'reportTemplates')), { ...data, createdBy: profile.uid, createdAt: serverTimestamp() }).commit()), 'Template saved');
+    const ok = await run(() => (t.id ? updateDoc(bdoc('reportTemplates', t.id), data)
+      : writeBatch(db).set(doc(bcol('reportTemplates')), { ...data, createdBy: profile.uid, createdAt: serverTimestamp() }).commit()), 'Template saved');
     if (ok) onClose();
   }
 
   return (
     <Modal open title={t.id ? 'Edit template' : 'New template'} onClose={onClose} wide
-      footer={<>{t.id && <Button variant="ghost" onClick={() => run(() => deleteDoc(doc(db, 'reportTemplates', t.id))).then((ok) => ok && onClose())}>Delete</Button>}
+      footer={<>{t.id && <Button variant="ghost" onClick={() => run(() => deleteDoc(bdoc('reportTemplates', t.id))).then((ok) => ok && onClose())}>Delete</Button>}
         <span className="spacer" /><Button variant="ghost" onClick={onClose}>Cancel</Button><Button busy={busy} onClick={save}>Save</Button></>}>
       <p className="muted small">Changes apply to future requests. Reports already requested keep the questions they were sent with.</p>
       <div className="form">

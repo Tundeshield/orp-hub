@@ -18,12 +18,18 @@ const ser = (v) => {
   return v;
 };
 
+// Walks every collection, including each branch's subcollections (branches/{id}/funds, …).
+// Collections are keyed by their full path, e.g. "branches/ijebu-ode/funds".
 const out = { project: key.project_id, exportedAt: new Date().toISOString(), collections: {} };
-for (const c of await db.listCollections()) {
-  const snap = await c.get();
-  out.collections[c.id] = snap.docs.map((d) => ({ id: d.id, ...ser(d.data()) }));
-  console.log(`${c.id}: ${snap.size}`);
+async function walk(collections) {
+  for (const c of collections) {
+    const snap = await c.get();
+    out.collections[c.path] = snap.docs.map((d) => ({ id: d.id, ...ser(d.data()) }));
+    console.log(`${c.path}: ${snap.size}`);
+    for (const d of snap.docs) await walk(await d.ref.listCollections());
+  }
 }
+await walk(await db.listCollections());
 mkdirSync('backups', { recursive: true });
 const file = `backups/orp-hub-full-${new Date().toISOString().slice(0, 10)}.json`;
 writeFileSync(file, JSON.stringify(out));

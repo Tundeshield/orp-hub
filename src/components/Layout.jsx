@@ -5,7 +5,7 @@ import { churchName } from '../firebase.js';
 import { ROLES, isAdmin, can, isDiaryManager } from '../lib/roles.js';
 
 export default function Layout() {
-  const { profile, signOut } = useAuth();
+  const { profile, signOut, accessibleBranches, switchBranch } = useAuth();
   const work = useWork();
   const financeCount = (can(profile, 'pastor') ? work.approvals.length : 0) + (can(profile, 'finance') ? work.toPay.length : 0) + work.clarifications.length;
   const reportCount = work.toReview.length + work.myOpenReports.length;
@@ -47,7 +47,11 @@ export default function Layout() {
       </aside>
       <div className="main">
         <header className="topbar">
-          <span className="church">{churchName}</span>
+          {accessibleBranches.length > 1 ? (
+            <select className="branch-switch" value={profile.branchId} onChange={(e) => switchBranch(e.target.value)} aria-label="Branch">
+              {accessibleBranches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+            </select>
+          ) : <span className="church">{profile.branchName}</span>}
           <span className="spacer" />
           <Link to="/tasks" className="bell hide-desktop" aria-label="Tasks" title="Tasks">✓</Link>
           {isAdmin(profile) && <Link to="/admin" className="bell hide-desktop" aria-label="Admin" title="Admin">⚙</Link>}

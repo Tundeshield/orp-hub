@@ -13,7 +13,7 @@ export default function Pending() {
           <p className="muted">Thanks, {profile.name}. The administrator has been notified on their dashboard and will assign your role shortly. This page updates automatically.</p>
         ) : (
           <>
-            <p className="muted">We couldn't create your profile for {user.email}.</p>
+            <p className="muted">Setting up your account for {user.email}… If this doesn't finish in a few seconds, tap Try again.</p>
             <Button onClick={() => retryProfile().catch(setError)}>Try again</Button>
             <ErrorNote error={error} />
           </>

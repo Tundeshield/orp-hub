@@ -9,7 +9,7 @@ let unsub = null;
 
 function start() {
   if (unsub) return;
-  unsub = onSnapshot(query(col('users'), where('active', '==', true)), (snap) => {
+  unsub = onSnapshot(query(col('members'), where('active', '==', true)), (snap) => {
     cache = snap.docs.map((d) => ({ uid: d.id, ...d.data() })).sort((a, b) => a.name.localeCompare(b.name));
     listeners.forEach((l) => l(cache));
   }, (e) => { console.warn('users listener stopped', e.code); unsub = null; });

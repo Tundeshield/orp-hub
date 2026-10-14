@@ -1,13 +1,16 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Navigate, useSearchParams } from 'react-router-dom';
-import { collection, doc, getDocs, limit, orderBy, query, serverTimestamp, writeBatch, deleteDoc } from 'firebase/firestore';
+import { doc, getDocs, limit, orderBy, query, serverTimestamp, writeBatch, deleteDoc } from 'firebase/firestore';
 import { db } from '../../firebase.js';
+import { slugify } from '../Onboarding.jsx';
+import { updateDoc } from 'firebase/firestore';
 import { useAuth } from '../../AuthContext.jsx';
 import { col, useLive, addAudit, addNotify } from '../../lib/db.js';
 import { ROLES, isAdmin, can } from '../../lib/roles.js';
 import { fmtDateTime, toDate, toInputDate } from '../../lib/dates.js';
 import { download } from '../../lib/csv.js';
 import { Badge, Button, Card, Empty, ErrorNote, Field, Loading, Modal, PageHeader, Tabs, useAction } from '../../components/ui.jsx';
+import { bcol, bdoc } from '../../lib/db.js';
 
 export default function Admin() {
   const { profile } = useAuth();
@@ -16,21 +19,23 @@ export default function Admin() {
   if (!isAdmin(profile)) return <Navigate to="/" replace />;
   return (
     <>
-      <PageHeader title="Administration" subtitle="People, roles, ministries, audit history and backups." />
+      <PageHeader title="Administration" subtitle={`${profile.branchName} — people, roles, ministries, audit history and backups.`} />
       <Tabs value={tab} onChange={(t) => setParams({ tab: t })} tabs={[
         { value: 'users', label: 'People & roles' }, { value: 'ministries', label: 'Ministries' },
         { value: 'audit', label: 'Audit history' }, { value: 'backup', label: 'Backup' },
+        { value: 'branches', label: profile.isSuperAdmin ? 'Branches' : 'Branch details' },
       ]} />
       {tab === 'users' && <Users />}
       {tab === 'ministries' && <Ministries />}
       {tab === 'audit' && <Audit />}
       {tab === 'backup' && <Backup />}
+      {tab === 'branches' && <Branches />}
     </>
   );
 }
 
 function Users() {
-  const users = useLive(() => col('users'), []);
+  const users = useLive(() => col('members'), []);
   const ministries = useLive(() => col('ministries'), []);
   const [editing, setEditing] = useState(null);
   const rows = useMemo(() => [...users.data].sort((a, b) => Number(a.active) - Number(b.active) || a.name.localeCompare(b.name)), [users.data]);
@@ -75,7 +80,7 @@ function UserModal({ u, onClose, ministries }) {
     const m = ministries.find((x) => x.id === f.ministryId);
     const ok = await run(async () => {
       const batch = writeBatch(db);
-      batch.update(doc(db, 'users', u.id), { roles: f.roles, active: f.active, ministryId: f.ministryId, ministryName: m?.name || '', updatedAt: serverTimestamp() });
+      batch.update(bdoc('members', u.id), { roles: f.roles, active: f.active, ministryId: f.ministryId, ministryName: m?.name || '', updatedAt: serverTimestamp() });
       addAudit(batch, profile, 'user.updated', 'user', u.id, `${u.name}: ${f.active ? 'active' : 'inactive'} — ${f.roles.join(', ')}`);
       if (!u.active && f.active) addNotify(batch, profile, u.id, 'Welcome to Pastor\'s Desk', `Your account is active as: ${f.roles.map((r) => ROLES[r]).join(', ')}`, '/');
       await batch.commit();
@@ -120,19 +125,19 @@ function UserModal({ u, onClose, ministries }) {
 function Ministries() {
   const { profile } = useAuth();
   const ministries = useLive(() => col('ministries'), []);
-  const users = useLive(() => col('users'), []);
+  const users = useLive(() => col('members'), []);
   const { busy, error, run } = useAction();
   const [name, setName] = useState('');
   const active = users.data.filter((u) => u.active).sort((a, b) => a.name.localeCompare(b.name));
   const rows = [...ministries.data].sort((a, b) => a.name.localeCompare(b.name));
   async function add() {
     if (!name.trim()) return;
-    if (await run(() => writeBatch(db).set(doc(collection(db, 'ministries')), { name: name.trim(), leaderUid: '', createdAt: serverTimestamp() }).commit(), 'Ministry added')) setName('');
+    if (await run(() => writeBatch(db).set(doc(bcol('ministries')), { name: name.trim(), leaderUid: '', createdAt: serverTimestamp() }).commit(), 'Ministry added')) setName('');
   }
   async function setLeader(m, uid) {
     await run(async () => {
       const b = writeBatch(db);
-      b.update(doc(db, 'ministries', m.id), { leaderUid: uid, updatedAt: serverTimestamp() });
+      b.update(bdoc('ministries', m.id), { leaderUid: uid, updatedAt: serverTimestamp() });
       addAudit(b, profile, 'ministry.leader', 'ministry', m.id, `${m.name} → ${active.find((u) => u.id === uid)?.name || 'none'}`);
       await b.commit();
     }, 'Leader updated');
@@ -153,7 +158,7 @@ function Ministries() {
               <select value={m.leaderUid || ''} onChange={(e) => setLeader(m, e.target.value)} style={{ width: 'auto', maxWidth: 220 }} aria-label={`Leader of ${m.name}`}>
                 <option value="">No leader</option>{active.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
               </select>
-              <button className="icon-btn" onClick={() => window.confirm(`Remove ${m.name}?`) && run(() => deleteDoc(doc(db, 'ministries', m.id)))} aria-label="Remove ministry">🗑</button>
+              <button className="icon-btn" onClick={() => window.confirm(`Remove ${m.name}?`) && run(() => deleteDoc(bdoc('ministries', m.id)))} aria-label="Remove ministry">🗑</button>
             </li>
           ))}</ul>
         )}
@@ -187,7 +192,7 @@ function Audit() {
   );
 }
 
-const BACKUP_COLLECTIONS = ['users', 'ministries', 'funds', 'requests', 'transactions', 'reconciliations', 'slots', 'appointments', 'reportTemplates', 'reports', 'tasks', 'audit'];
+const BACKUP_COLLECTIONS = ['members', 'ministries', 'funds', 'requests', 'transactions', 'reconciliations', 'slots', 'appointments', 'reportTemplates', 'reports', 'tasks', 'audit'];
 
 function serialize(v) {
   if (v && typeof v.toDate === 'function') return { __ts: toDate(v).toISOString() };
@@ -202,14 +207,14 @@ function Backup() {
   const [result, setResult] = useState(null);
   async function exportAll() {
     await run(async () => {
-      const out = { exportedAt: new Date().toISOString(), exportedBy: profile.email, collections: {} };
+      const out = { exportedAt: new Date().toISOString(), exportedBy: profile.email, branch: profile.branchId, collections: {} };
       const counts = {};
       for (const name of BACKUP_COLLECTIONS) {
-        const snap = await getDocs(collection(db, name));
-        out.collections[name] = snap.docs.map((d) => ({ id: d.id, ...serialize(d.data()) }));
+        const snap = await getDocs(bcol(name));
+        out.collections[`branches/${profile.branchId}/${name}`] = snap.docs.map((d) => ({ id: d.id, ...serialize(d.data()) }));
         counts[name] = snap.size;
       }
-      download(`orp-hub-backup-${toInputDate(new Date())}.json`, JSON.stringify(out, null, 1), 'application/json');
+      download(`pastors-desk-${profile.branchId}-backup-${toInputDate(new Date())}.json`, JSON.stringify(out, null, 1), 'application/json');
       setResult(counts);
     }, 'Backup downloaded');
   }
@@ -226,6 +231,73 @@ function Backup() {
         <p className="small">Full backups and restores use the scripts in the project's <code>scripts/</code> folder with a Firebase service-account key. Step-by-step instructions are in <strong>docs/BACKUP_AND_RECOVERY.md</strong>.</p>
         {can(profile, 'pastor') ? null : <p className="small muted">Ask the developer to run the full backup each month.</p>}
       </Card>
+    </div>
+  );
+}
+
+function Branches() {
+  const { profile, branches, switchBranch } = useAuth();
+  const { busy, error, setError, run } = useAction();
+  const [f, setF] = useState({ name: '', location: '', id: '' });
+  const [edit, setEdit] = useState(null);
+  const id = f.id || slugify(f.name.replace(/^the elevation church\W*/i, ''));
+  const origin = window.location.origin;
+
+  async function create() {
+    if (f.name.trim().length < 2) return setError('Give the branch a name.');
+    if (branches.some((b) => b.id === id)) return setError('That short code is already used. Choose another.');
+    const ok = await run(async () => {
+      const batch = writeBatch(db);
+      batch.set(doc(db, 'branches', id), { name: f.name.trim(), location: f.location.trim(), createdBy: profile.uid, createdAt: serverTimestamp() });
+      batch.set(doc(db, 'branches', id, 'members', profile.uid), {
+        name: profile.name, email: profile.email, phone: profile.phone || '', roles: ['admin'], active: true, ministryId: '', ministryName: '', createdAt: serverTimestamp(),
+      });
+      await batch.commit();
+    }, 'Branch created');
+    if (ok) setF({ name: '', location: '', id: '' });
+  }
+
+  return (
+    <div className="grid detail-grid">
+      <Card title={profile.isSuperAdmin ? 'Branches' : 'This branch'} pad={false}>
+        <ul className="list">{branches.filter((b) => profile.isSuperAdmin || b.id === profile.branchId).map((b) => (
+          <li key={b.id} className="list-item">
+            <div className="list-main">
+              <div className="list-title">{b.name} {b.id === profile.branchId && <Badge tone="blue">current</Badge>}</div>
+              <div className="list-meta">{b.location ? `${b.location} · ` : ''}Public page: <a href={`${origin}/connect/${b.id}`} target="_blank" rel="noreferrer">{origin.replace(/^https?:\/\//, '')}/connect/{b.id}</a></div>
+            </div>
+            <div className="list-side row">
+              {b.id !== profile.branchId && <Button size="sm" variant="secondary" onClick={() => switchBranch(b.id)}>Switch to</Button>}
+              <Button size="sm" variant="ghost" onClick={() => setEdit({ ...b })}>Edit</Button>
+            </div>
+          </li>
+        ))}</ul>
+      </Card>
+      {profile.isSuperAdmin && (
+        <Card title="Add a branch">
+          <div className="stack">
+            <Field label="Branch name"><input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder="e.g. The Elevation Church · Abeokuta" /></Field>
+            <Field label="Location (optional)"><input value={f.location} onChange={(e) => setF({ ...f, location: e.target.value })} /></Field>
+            <Field label="Short code" hint={`Public link: ${origin.replace(/^https?:\/\//, '')}/connect/${id || '…'}. Can't be changed later.`}>
+              <input value={id} onChange={(e) => setF({ ...f, id: slugify(e.target.value) })} />
+            </Field>
+            <Button busy={busy} onClick={create}>Create branch</Button>
+            <ErrorNote error={error} />
+            <p className="muted small">Each branch is completely separate: its own funds, diary, reports, people and roles. You'll be its administrator; invite its pastor, assistant and finance officer to sign up and choose the branch, then give them roles in People &amp; roles.</p>
+          </div>
+        </Card>
+      )}
+      {edit && (
+        <Modal open title="Edit branch" onClose={() => setEdit(null)}
+          footer={<><Button variant="ghost" onClick={() => setEdit(null)}>Cancel</Button>
+            <Button busy={busy} onClick={async () => { if (await run(() => updateDoc(doc(db, 'branches', edit.id), { name: edit.name.trim(), location: (edit.location || '').trim(), updatedAt: serverTimestamp() }), 'Saved')) setEdit(null); }}>Save</Button></>}>
+          <div className="stack">
+            <Field label="Branch name"><input value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })} /></Field>
+            <Field label="Location"><input value={edit.location || ''} onChange={(e) => setEdit({ ...edit, location: e.target.value })} /></Field>
+            <p className="muted small">Short code: {edit.id}</p>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

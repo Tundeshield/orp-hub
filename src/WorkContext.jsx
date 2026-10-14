@@ -34,7 +34,7 @@ export function WorkProvider({ children }) {
     if (careTeam) return query(col('prayers'), where('status', '==', 'new'), where('confidential', '==', false));
     return null;
   }, [pastor, careTeam]);
-  const pendingUsers = useLive(() => admin ? query(col('users'), where('active', '==', false)) : null, [admin]);
+  const pendingUsers = useLive(() => admin ? query(col('members'), where('active', '==', false)) : null, [admin]);
   const unread = useLive(() => query(col('notifications'), where('toUid', '==', uid), where('read', '==', false)), [uid]);
 
   const value = useMemo(() => {

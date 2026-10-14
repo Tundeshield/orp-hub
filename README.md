@@ -20,6 +20,14 @@ A simple, free-to-run web app for the **Office of the Resident Pastor**: financi
 | **Tasks & notifications** | Assign tasks with priority, due date and status; overdue tracking; in-app notifications for approvals, appointments, reports and tasks. |
 | **Admin** | Activate accounts and assign roles, manage ministries and their leaders, view the permanent audit history, download backups. |
 
+## Branches
+
+Pastor's Desk is multi-branch. Each branch (e.g. Ijebu Ode, Abeokuta) has completely separate funds, diary, reports, people, roles and public page. Data lives under `branches/{branchId}/…` in Firestore and the security rules only let a branch's members see it.
+
+- **Super admin** (the first account created): creates branches (Admin → Branches), switches between them from the header, and acts as Administrator in every branch. Like any admin, a super admin cannot approve money or read confidential pastoral records.
+- **New people** sign up, choose their branch, and wait for that branch's administrator to give them a role. A person can belong to more than one branch, with different roles in each.
+- **Public page:** each branch has its own link and QR codes: `/connect/{branch-code}` (e.g. `/connect/ijebu-ode`). `/connect` lists all branches.
+
 ## Roles
 
 | Role | Can |
@@ -49,8 +57,9 @@ A person can hold more than one role. All permissions are enforced in [`firestor
 2. **Authentication → Sign-in method →** enable **Email/Password**.
 3. **Authentication → Settings → Authorized domains →** add your Netlify domain (e.g. `orp-hub.netlify.app`).
 4. **Firestore Database → Create database →** production mode, nearest location.
-5. **Firestore → Rules →** paste the contents of [`firestore.rules`](firestore.rules) and click **Publish**. Do this again whenever `firestore.rules` changes.
-6. **Project settings → Your apps → Web app →** copy the config values into the environment variables below.
+5. **Authentication → Sign-in method →** also enable **Anonymous** (used by the public booking/prayer pages; visitors don't create accounts).
+6. **Security rules are published automatically** by GitHub Actions after all tests pass, using the `FIREBASE_SERVICE_ACCOUNT` repository secret: Firebase → Project settings → Service accounts → *Generate new private key*, then GitHub → Settings → Secrets and variables → Actions → New secret `FIREBASE_SERVICE_ACCOUNT` with the file's contents. (Without the secret, paste [`firestore.rules`](firestore.rules) into Firestore → Rules → Publish after each change.)
+7. **Project settings → Your apps → Web app →** copy the config values into the environment variables below.
 
 ### 2. Environment variables
 
@@ -74,7 +83,7 @@ Connect the GitHub repository (**Add new project → Import an existing project*
 
 ### 4. First sign-in
 
-The **first account created becomes the Administrator**. Sign up with your own email first, then:
+The **first account created becomes the super admin**. Sign up with your own email first and create the first branch, then in each branch:
 
 1. Admin → **Ministries**: add the ministries/departments.
 2. Ask the pastor, assistant, finance officer and leaders to create accounts; activate each in **Admin → People & roles** and assign roles. Set each ministry's leader.

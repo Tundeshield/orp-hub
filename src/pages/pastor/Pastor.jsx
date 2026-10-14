@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { collection, doc, serverTimestamp, Timestamp, updateDoc, writeBatch, deleteDoc } from 'firebase/firestore';
+import { doc, serverTimestamp, Timestamp, updateDoc, writeBatch, deleteDoc } from 'firebase/firestore';
 import { db } from '../../firebase.js';
 import { useAuth } from '../../AuthContext.jsx';
 import { useWork } from '../../WorkContext.jsx';
@@ -11,6 +11,7 @@ import { formatNGN } from '../../lib/money.js';
 import { addDays, fmtDate, fmtDateTime, fmtTime, fromInputDate, isOverdue, startOfDay, toDate, toInputDate, relative } from '../../lib/dates.js';
 import { Badge, Button, Card, Empty, ErrorNote, Field, Loading, Modal, PageHeader, Stat, Tabs, useAction } from '../../components/ui.jsx';
 import { TaskForm } from '../Tasks.jsx';
+import { bcol, bdoc } from '../../lib/db.js';
 
 export default function Pastor() {
   const { profile } = useAuth();
@@ -116,7 +117,7 @@ function Followups() {
                 {f.status === 'done' && <Badge status="done">done</Badge>}
                 <Button size="sm" variant="ghost" onClick={() => setTask(f)}>Delegate</Button>
                 <Button size="sm" variant="secondary" onClick={() => setEditing(f)}>Edit</Button>
-                {f.status === 'open' && <Button size="sm" variant="success" busy={done.busy} onClick={() => done.run(() => updateDoc(doc(db, 'followups', f.id), { status: 'done', doneAt: serverTimestamp(), updatedAt: serverTimestamp() }), 'Marked done')}>Done</Button>}
+                {f.status === 'open' && <Button size="sm" variant="success" busy={done.busy} onClick={() => done.run(() => updateDoc(bdoc('followups', f.id), { status: 'done', doneAt: serverTimestamp(), updatedAt: serverTimestamp() }), 'Marked done')}>Done</Button>}
               </div>
             </li>
           ))}</ul>
@@ -143,13 +144,13 @@ function FollowupModal({ f: existing, onClose }) {
     if (!f.person.trim() || !f.reason.trim()) return setError('Who, and why?');
     const data = { person: f.person.trim(), contact: f.contact.trim(), reason: f.reason.trim(), notes: f.notes.trim(), status: f.status,
       dueDate: f.dueDate ? Timestamp.fromDate(fromInputDate(f.dueDate, true)) : null, updatedAt: serverTimestamp() };
-    const ok = await run(() => (existing.id ? updateDoc(doc(db, 'followups', existing.id), data)
-      : writeBatch(db).set(doc(collection(db, 'followups')), { ...data, createdBy: profile.uid, createdByName: profile.name, createdAt: serverTimestamp() }).commit()), 'Saved');
+    const ok = await run(() => (existing.id ? updateDoc(bdoc('followups', existing.id), data)
+      : writeBatch(db).set(doc(bcol('followups')), { ...data, createdBy: profile.uid, createdByName: profile.name, createdAt: serverTimestamp() }).commit()), 'Saved');
     if (ok) onClose();
   }
   return (
     <Modal open title={existing.id ? 'Edit follow-up' : 'New pastoral follow-up'} onClose={onClose}
-      footer={<>{existing.id && <Button variant="ghost" onClick={() => run(() => deleteDoc(doc(db, 'followups', existing.id))).then((ok) => ok && onClose())}>Delete</Button>}
+      footer={<>{existing.id && <Button variant="ghost" onClick={() => run(() => deleteDoc(bdoc('followups', existing.id))).then((ok) => ok && onClose())}>Delete</Button>}
         <span className="spacer" /><Button variant="ghost" onClick={onClose}>Cancel</Button><Button busy={busy} onClick={save}>Save</Button></>}>
       <div className="form">
         <Field label="Person"><input value={f.person || ''} onChange={(e) => setF({ ...f, person: e.target.value })} /></Field>
@@ -183,7 +184,7 @@ function Prayers() {
   async function setStatus(p, status) {
     await act.run(async () => {
       const batch = writeBatch(db);
-      batch.update(doc(db, 'prayers', p.id), { status, updatedAt: serverTimestamp() });
+      batch.update(bdoc('prayers', p.id), { status, updatedAt: serverTimestamp() });
       const msg = { praying: 'The pastor is praying with you', answered: 'Marked as answered', shared: 'Your testimony has been shared with the church team' }[status];
       if (msg && p.source !== 'public') addNotify(batch, profile, p.submittedBy, msg, p.content.slice(0, 80), '/pastor?tab=prayer');
       await batch.commit();
@@ -223,7 +224,7 @@ function Prayers() {
                 {view === 'inbox' && p.status === 'new' && <Button size="sm" variant="secondary" onClick={() => setStatus(p, 'praying')}>Praying</Button>}
                 {view === 'inbox' && ['new', 'praying'].includes(p.status) && p.kind === 'prayer' && <Button size="sm" variant="ghost" onClick={() => setStatus(p, 'answered')}>Answered</Button>}
                 {view === 'inbox' && p.kind === 'testimony' && p.status !== 'shared' && !p.confidential && <Button size="sm" variant="success" onClick={() => setStatus(p, 'shared')}>Share with team</Button>}
-                {view === 'mine' && p.status === 'new' && <button className="icon-btn" onClick={() => act.run(() => deleteDoc(doc(db, 'prayers', p.id)))} aria-label="Withdraw">🗑</button>}
+                {view === 'mine' && p.status === 'new' && <button className="icon-btn" onClick={() => act.run(() => deleteDoc(bdoc('prayers', p.id)))} aria-label="Withdraw">🗑</button>}
               </div>
             </li>
           ))}</ul>
@@ -244,7 +245,7 @@ function PrayerModal({ open, onClose, careUids }) {
     if (!f.content.trim()) return setError('Write your request or testimony.');
     const ok = await run(async () => {
       const batch = writeBatch(db);
-      batch.set(doc(collection(db, 'prayers')), {
+      batch.set(doc(bcol('prayers')), {
         kind: f.kind, content: f.content.trim(), name: f.name.trim() || profile.name, confidential: f.confidential, anonymous: f.anonymous,
         status: 'new', submittedBy: profile.uid, createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
       });
@@ -309,13 +310,13 @@ function NoteModal({ n, onClose }) {
   async function save() {
     if (!f.title.trim()) return setError('Add a title.');
     const data = { title: f.title.trim(), person: f.person.trim(), content: f.content, date: Timestamp.fromDate(fromInputDate(f.date)), updatedAt: serverTimestamp() };
-    const ok = await run(() => (n.id ? updateDoc(doc(db, 'pastoralNotes', n.id), data)
-      : writeBatch(db).set(doc(collection(db, 'pastoralNotes')), { ...data, createdBy: profile.uid, createdAt: serverTimestamp() }).commit()), 'Note saved');
+    const ok = await run(() => (n.id ? updateDoc(bdoc('pastoralNotes', n.id), data)
+      : writeBatch(db).set(doc(bcol('pastoralNotes')), { ...data, createdBy: profile.uid, createdAt: serverTimestamp() }).commit()), 'Note saved');
     if (ok) onClose();
   }
   return (
     <Modal open title={n.id ? 'Edit private note' : 'New private note'} onClose={onClose} wide
-      footer={<>{n.id && <Button variant="ghost" onClick={() => window.confirm('Delete this note permanently?') && run(() => deleteDoc(doc(db, 'pastoralNotes', n.id))).then((ok) => ok && onClose())}>Delete</Button>}
+      footer={<>{n.id && <Button variant="ghost" onClick={() => window.confirm('Delete this note permanently?') && run(() => deleteDoc(bdoc('pastoralNotes', n.id))).then((ok) => ok && onClose())}>Delete</Button>}
         <span className="spacer" /><Button variant="ghost" onClick={onClose}>Cancel</Button><Button busy={busy} onClick={save}>Save</Button></>}>
       <div className="form">
         <Field label="Title"><input value={f.title || ''} onChange={(e) => setF({ ...f, title: e.target.value })} /></Field>

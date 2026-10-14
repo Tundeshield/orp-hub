@@ -21,6 +21,9 @@ initializeApp({ projectId: PROJECT });
 const auth = getAuth();
 const db = getFirestore();
 const PASSWORD = 'Password123!';
+const BRANCH = 'ijebu-ode';
+const B = bdoc(`branches/${BRANCH}`);
+const bdoc = (p) => B.collection(p.split('/')[0]).doc(p.split('/').slice(1).join('/'));
 const now = new Date();
 const day = (n, h = 9, m = 0) => { const d = new Date(now); d.setDate(d.getDate() + n); d.setHours(h, m, 0, 0); return d; };
 const T = (d) => Timestamp.fromDate(d);
@@ -48,20 +51,33 @@ async function users() {
   }
   for (const [id, name] of Object.entries(MINISTRIES)) {
     const leader = PEOPLE.find((p) => p.ministry === id);
-    await db.doc(`ministries/${id}`).set({ name, leaderUid: leader ? U[leader.key].uid : '', createdAt: FieldValue.serverTimestamp() });
+    await bdoc(`ministries/${id}`).set({ name, leaderUid: leader ? U[leader.key].uid : '', createdAt: FieldValue.serverTimestamp() });
   }
+  await B.set({ name: 'The Elevation Church · Ijebu Ode', location: 'Ijebu Ode, Ogun State', createdAt: FieldValue.serverTimestamp() });
+  await db.doc('branches/abeokuta').set({ name: 'The Elevation Church · Abeokuta', location: 'Abeokuta, Ogun State', createdAt: FieldValue.serverTimestamp() });
+  await db.doc('branches/abeokuta/settings/public').set({ bookingEnabled: true, prayerEnabled: true, officePhone: '0803 555 0200', bookingDays: 21 });
   for (const p of PEOPLE) {
     await db.doc(`users/${U[p.key].uid}`).set({
+      name: p.name, email: p.email, phone: '0803 000 0000', branchIds: [BRANCH], currentBranch: BRANCH,
+      superAdmin: p.key === 'admin', createdAt: FieldValue.serverTimestamp(),
+    });
+    await B.collection('members').doc(U[p.key].uid).set({
       name: p.name, email: p.email, phone: '0803 000 0000', roles: p.roles, active: true,
       ministryId: p.ministry || '', ministryName: p.ministry ? MINISTRIES[p.ministry] : '', createdAt: FieldValue.serverTimestamp(),
     });
   }
-  await db.doc('settings/public').set({ bookingEnabled: true, prayerEnabled: true, officePhone: '0803 555 0100', welcomeNote: '', bookingNote: '', prayerNote: '', bookingDays: 21 });
+  // Abeokuta has its own pastor, who must never see Ijebu Ode's data
+  let ab;
+  try { ab = await auth.getUserByEmail('abeokuta.pastor@orp.test'); } catch { ab = await auth.createUser({ email: 'abeokuta.pastor@orp.test', password: PASSWORD, displayName: 'Pastor Deji Ogunleye' }); }
+  await db.doc(`users/${ab.uid}`).set({ name: 'Pastor Deji Ogunleye', email: 'abeokuta.pastor@orp.test', phone: '', branchIds: ['abeokuta'], currentBranch: 'abeokuta', createdAt: FieldValue.serverTimestamp() });
+  await db.doc(`branches/abeokuta/members/${ab.uid}`).set({ name: 'Pastor Deji Ogunleye', email: 'abeokuta.pastor@orp.test', phone: '', roles: ['pastor'], active: true, ministryId: '', ministryName: '', createdAt: FieldValue.serverTimestamp() });
+  await bdoc('settings/public').set({ bookingEnabled: true, prayerEnabled: true, officePhone: '0803 555 0100', welcomeNote: '', bookingNote: '', prayerNote: '', bookingDays: 21 });
   await db.doc('meta/setup').set({ adminUid: U.admin.uid, at: FieldValue.serverTimestamp() });
   // one person waiting for activation
   let pend;
   try { pend = await auth.getUserByEmail('newvolunteer@orp.test'); } catch { pend = await auth.createUser({ email: 'newvolunteer@orp.test', password: PASSWORD, displayName: 'Ifeoma Obi' }); }
-  await db.doc(`users/${pend.uid}`).set({ name: 'Ifeoma Obi', email: 'newvolunteer@orp.test', phone: '', roles: [], active: false, ministryId: '', createdAt: FieldValue.serverTimestamp() });
+  await db.doc(`users/${pend.uid}`).set({ name: 'Ifeoma Obi', email: 'newvolunteer@orp.test', phone: '', branchIds: [BRANCH], currentBranch: BRANCH, createdAt: FieldValue.serverTimestamp() });
+  await B.collection('members').doc(pend.uid).set({ name: 'Ifeoma Obi', email: 'newvolunteer@orp.test', phone: '', roles: [], active: false, ministryId: '', ministryName: '', createdAt: FieldValue.serverTimestamp() });
 }
 
 const tl = (who, action, note = '', d = now) => ({ at: T(d), by: U[who].uid, byName: U[who].name, action, note });
@@ -76,7 +92,7 @@ async function finance() {
   const state = {};
   for (const [id, f] of Object.entries(funds)) {
     state[id] = { allocated: 0, committed: 0, paid: 0 };
-    await db.doc(`funds/${id}`).set({ ...f, active: true, allocated: 0, committed: 0, paid: 0, lastTxId: null, createdBy: U.finance.uid, createdAt: T(day(-60)), updatedAt: T(day(-60)) });
+    await bdoc(`funds/${id}`).set({ ...f, active: true, allocated: 0, committed: 0, paid: 0, lastTxId: null, createdBy: U.finance.uid, createdAt: T(day(-60)), updatedAt: T(day(-60)) });
   }
   const reqs = {};
   async function ledger(type, fundId, amount, { reqId, who = 'finance', date = now, method = '', reference = '', note = '' } = {}) {
@@ -84,21 +100,21 @@ async function finance() {
     const amt = type === 'release' ? r.amount - r.paid - r.released : amount;
     const { fundPatch, requestPatch } = applyLedger(type, amt, state[fundId], r);
     Object.assign(state[fundId], fundPatch);
-    const tx = db.collection('transactions').doc();
+    const tx = B.collection('transactions').doc();
     await tx.set({ type, fundId, fundName: funds[fundId].name, requestId: reqId || null, requestTitle: r?.title || null, amount: amt, date: T(date), method, reference, note, createdBy: U[who].uid, createdByName: U[who].name, createdAt: T(date) });
-    await db.doc(`funds/${fundId}`).update({ ...fundPatch, lastTxId: tx.id, updatedAt: T(date) });
+    await bdoc(`funds/${fundId}`).update({ ...fundPatch, lastTxId: tx.id, updatedAt: T(date) });
     if (r) {
       Object.assign(r, requestPatch);
       const label = { commit: 'Approved', payment: 'Payment recorded', advance: 'Advance paid', refund: 'Refund recorded', release: 'Closed — unpaid balance released' }[type];
       r.timeline.push(tl(who, label, note, date));
       const extra = type === 'commit' ? { decidedBy: U.pastor.uid, decidedByName: U.pastor.name, decidedAt: T(date) } : {};
-      await db.doc(`requests/${reqId}`).update({ ...requestPatch, ...extra, lastTxId: tx.id, timeline: r.timeline, updatedAt: T(date) });
+      await bdoc(`requests/${reqId}`).update({ ...requestPatch, ...extra, lastTxId: tx.id, timeline: r.timeline, updatedAt: T(date) });
     }
-    await db.collection('audit').add({ action: `ledger.${type}`, entityType: reqId ? 'request' : 'fund', entityId: reqId || fundId, details: `${type} ₦${(amt / 100).toLocaleString()} — ${funds[fundId].name}`, actorUid: U[who].uid, actorName: U[who].name, at: T(date) });
+    await B.collection('audit').add({ action: `ledger.${type}`, entityType: reqId ? 'request' : 'fund', entityId: reqId || fundId, details: `${type} ₦${(amt / 100).toLocaleString()} — ${funds[fundId].name}`, actorUid: U[who].uid, actorName: U[who].name, at: T(date) });
   }
   async function request(id, who, fundId, title, amount, category, description, created, extra = {}) {
     reqs[id] = { title, amount: naira(amount), paid: 0, released: 0, status: 'pending', timeline: [tl(who, 'Submitted', '', created)] };
-    await db.doc(`requests/${id}`).set({
+    await bdoc(`requests/${id}`).set({
       title, description, category, fundId, fundName: funds[fundId].name, amount: naira(amount), neededBy: T(day(10)),
       ministry: PEOPLE.find((p) => p.key === who)?.ministry ? MINISTRIES[PEOPLE.find((p) => p.key === who).ministry] : '',
       requestedBy: U[who].uid, requestedByName: U[who].name, status: 'pending', paid: 0, released: 0, lastTxId: null,
@@ -136,13 +152,13 @@ async function finance() {
   // clarification
   await request('r-party', 'children', 'general', "Children's end-of-year party", 210000, 'Ministry programme', 'Party for 80 children.', day(-4));
   reqs['r-party'].timeline.push(tl('pastor', 'Clarification requested', 'Please break down the costs (food, gifts, decorations) and confirm the number of volunteers.', day(-3)));
-  await db.doc('requests/r-party').update({ status: 'clarification', decisionNote: 'Please break down the costs (food, gifts, decorations) and confirm the number of volunteers.', decidedBy: U.pastor.uid, decidedByName: U.pastor.name, decidedAt: T(day(-3)), timeline: reqs['r-party'].timeline });
+  await bdoc('requests/r-party').update({ status: 'clarification', decisionNote: 'Please break down the costs (food, gifts, decorations) and confirm the number of volunteers.', decidedBy: U.pastor.uid, decidedByName: U.pastor.name, decidedAt: T(day(-3)), timeline: reqs['r-party'].timeline });
   // rejected
   await request('r-tv', 'member', 'general', 'Smart TV for the lobby', 520000, 'Equipment', '65-inch TV for announcements in the lobby.', day(-9));
   reqs['r-tv'].timeline.push(tl('pastor', 'Rejected', 'Not a priority this year. Let us revisit in the 2027 budget.', day(-8)));
-  await db.doc('requests/r-tv').update({ status: 'rejected', decisionNote: 'Not a priority this year. Let us revisit in the 2027 budget.', decidedBy: U.pastor.uid, decidedByName: U.pastor.name, decidedAt: T(day(-8)), timeline: reqs['r-tv'].timeline });
+  await bdoc('requests/r-tv').update({ status: 'rejected', decisionNote: 'Not a priority this year. Let us revisit in the 2027 budget.', decidedBy: U.pastor.uid, decidedByName: U.pastor.name, decidedAt: T(day(-8)), timeline: reqs['r-tv'].timeline });
 
-  await db.collection('reconciliations').add({ fundId: null, scope: 'All funds', account: 'GTBank current', asOf: T(day(-30)), statementBalance: naira(4815000), bookBalance: naira(4815000), difference: 0, note: 'Matches September statement.', createdBy: U.finance.uid, createdByName: U.finance.name, createdAt: T(day(-29)) });
+  await B.collection('reconciliations').add({ fundId: null, scope: 'All funds', account: 'GTBank current', asOf: T(day(-30)), statementBalance: naira(4815000), bookBalance: naira(4815000), difference: 0, note: 'Matches September statement.', createdBy: U.finance.uid, createdByName: U.finance.name, createdAt: T(day(-29)) });
 }
 
 async function meetings() {
@@ -154,7 +170,7 @@ async function meetings() {
     for (let m = 0; m < 6; m++) {
       const start = day(d, 10, 0); start.setMinutes(m * 30);
       const end = new Date(start.getTime() + 30 * 60000);
-      const ref = db.collection('slots').doc();
+      const ref = B.collection('slots').doc();
       slots.push({ ref, start, end });
       batch.set(ref, { start: T(start), end: T(end), status: 'open', appointmentId: null, bookedBy: null, location: "Pastor's office", createdBy: U.assistant.uid, createdAt: T(day(-3)), updatedAt: T(day(-3)) });
     }
@@ -168,31 +184,31 @@ async function meetings() {
   ];
   for (const [i, who, purpose] of bookings) {
     const s = slots[i];
-    const appt = db.collection('appointments').doc();
+    const appt = B.collection('appointments').doc();
     await appt.set({ slotId: s.ref.id, start: T(s.start), end: T(s.end), bookedBy: U[who].uid, bookedByName: U[who].name, attendeeUid: U[who].uid, attendeeName: U[who].name, phone: '0803 000 0000', purpose, location: "Pastor's office", status: 'booked', createdAt: T(day(-1)), updatedAt: T(day(-1)) });
     await s.ref.update({ status: 'booked', appointmentId: appt.id, bookedBy: U[who].uid });
   }
   // a visitor booked by the assistant
   const v = slots[4];
-  const va = db.collection('appointments').doc();
+  const va = B.collection('appointments').doc();
   await va.set({ slotId: v.ref.id, start: T(v.start), end: T(v.end), bookedBy: U.assistant.uid, bookedByName: U.assistant.name, attendeeUid: null, attendeeName: 'Mr. Adebayo (visitor)', phone: '0812 345 6789', purpose: 'New resident — wants to join the church and discuss baptism', location: "Pastor's office", status: 'booked', createdAt: T(day(-1)), updatedAt: T(day(-1)) });
   await v.ref.update({ status: 'booked', appointmentId: va.id, bookedBy: U.assistant.uid });
   // a past appointment with notes
   const pastStart = day(-6, 11); const pastEnd = new Date(pastStart.getTime() + 1800000);
-  const ps = db.collection('slots').doc();
-  const pa = db.collection('appointments').doc();
+  const ps = B.collection('slots').doc();
+  const pa = B.collection('appointments').doc();
   await ps.set({ start: T(pastStart), end: T(pastEnd), status: 'booked', appointmentId: pa.id, bookedBy: U.ushers.uid, location: "Pastor's office", createdBy: U.assistant.uid, createdAt: T(day(-10)) });
   await pa.set({ slotId: ps.id, start: T(pastStart), end: T(pastEnd), bookedBy: U.ushers.uid, bookedByName: U.ushers.name, attendeeUid: U.ushers.uid, attendeeName: U.ushers.name, phone: '', purpose: 'Ushering rota and new protocol team', status: 'completed', createdAt: T(day(-10)) });
-  await db.collection('meetingNotes').add({ title: 'Meeting with Ushering & Protocol', date: T(pastStart), attendees: 'Kunle Oyelaran, Grace Bello', appointmentId: pa.id,
+  await B.collection('meetingNotes').add({ title: 'Meeting with Ushering & Protocol', date: T(pastStart), attendees: 'Kunle Oyelaran, Grace Bello', appointmentId: pa.id,
     notes: 'Reviewed the Sunday rota. Ushers are stretched at the second service.', decisions: 'Recruit 6 new ushers by end of November\nTrain protocol team before Christmas services',
     confidential: false, createdBy: U.pastor.uid, createdByName: U.pastor.name, createdAt: T(pastStart), updatedAt: T(pastStart) });
-  await db.collection('meetingNotes').add({ title: 'Counselling session — confidential', date: T(day(-12)), attendees: '', notes: 'Confidential counselling notes.', decisions: '', confidential: true, createdBy: U.pastor.uid, createdByName: U.pastor.name, createdAt: T(day(-12)), updatedAt: T(day(-12)) });
+  await B.collection('meetingNotes').add({ title: 'Counselling session — confidential', date: T(day(-12)), attendees: '', notes: 'Confidential counselling notes.', decisions: '', confidential: true, createdBy: U.pastor.uid, createdByName: U.pastor.name, createdAt: T(day(-12)), updatedAt: T(day(-12)) });
 }
 
 async function reports() {
   const tmplIds = [];
   for (const t of STANDARD_TEMPLATES) {
-    const ref = db.collection('reportTemplates').doc();
+    const ref = B.collection('reportTemplates').doc();
     await ref.set({ ...t, active: true, createdBy: U.assistant.uid, createdAt: T(day(-50)) });
     tmplIds.push(ref.id);
   }
@@ -209,7 +225,7 @@ async function reports() {
     const m = PEOPLE.find((p) => p.key === who).ministry;
     const submitted = answers[who];
     const status = who === 'youth' ? 'reviewed' : who === 'children' ? 'pending' : 'submitted';
-    await db.collection('reports').add({
+    await B.collection('reports').add({
       templateId: tmplIds[0], templateName: monthly.name, fields: monthly.fields, period: lastMonth, dueDate: T(day(-9, 23, 59)),
       ministryId: m, ministryName: MINISTRIES[m], leaderUid: U[who].uid, leaderName: U[who].name,
       status, answers: submitted && status !== 'pending' ? submitted : {}, reviewerNote: status === 'reviewed' ? 'Great growth. Let us discuss the venue.' : '',
@@ -218,7 +234,7 @@ async function reports() {
       timeline: [tl('assistant', 'Requested', '', day(-30)), ...(status !== 'pending' ? [tl(who, 'Submitted', '', day(-11))] : []), ...(status === 'reviewed' ? [tl('pastor', 'Reviewed', '', day(-6))] : [])],
       createdBy: U.assistant.uid, createdAt: T(day(-30)), updatedAt: T(day(-6)),
     });
-    await db.collection('reports').add({
+    await B.collection('reports').add({
       templateId: tmplIds[0], templateName: monthly.name, fields: monthly.fields, period: thisMonth, dueDate: T(day(20, 23, 59)),
       ministryId: m, ministryName: MINISTRIES[m], leaderUid: U[who].uid, leaderName: U[who].name,
       status: 'pending', answers: {}, reviewerNote: '', timeline: [tl('assistant', 'Requested', '', day(-1))],
@@ -228,7 +244,7 @@ async function reports() {
 }
 
 async function care() {
-  const task = (title, assignee, creator, priority, due, status = 'todo', source = null, description = '') => db.collection('tasks').add({
+  const task = (title, assignee, creator, priority, due, status = 'todo', source = null, description = '') => B.collection('tasks').add({
     title, description, assigneeUid: U[assignee].uid, assigneeName: U[assignee].name, createdBy: U[creator].uid, createdByName: U[creator].name,
     priority, dueDate: due ? T(due) : null, status, source, progressNote: '', completedAt: status === 'done' ? T(day(-1)) : null, createdAt: T(day(-7)), updatedAt: T(day(-1)),
   });
@@ -238,20 +254,20 @@ async function care() {
   await task('Update welfare beneficiaries list', 'assistant', 'pastor', 'low', day(14));
   await task('Send September bank statement to the pastor', 'finance', 'pastor', 'medium', day(-12), 'done');
 
-  await db.collection('followups').add({ person: 'Bro. Chinedu Okeke', contact: '0806 111 2233', reason: 'Recovering after surgery', notes: 'Visit at home with the welfare team.', status: 'open', dueDate: T(day(1, 23, 59)), createdBy: U.pastor.uid, createdByName: U.pastor.name, createdAt: T(day(-6)), updatedAt: T(day(-6)) });
-  await db.collection('followups').add({ person: 'The Adeyemi family', contact: '0809 555 1212', reason: 'Bereavement — condolence visit', notes: '', status: 'open', dueDate: T(day(-1, 23, 59)), createdBy: U.assistant.uid, createdByName: U.assistant.name, createdAt: T(day(-3)), updatedAt: T(day(-3)) });
-  await db.collection('followups').add({ person: 'Sis. Ruth Akande', contact: '0802 444 9090', reason: 'New convert — discipleship class', notes: '', status: 'open', dueDate: T(day(6, 23, 59)), createdBy: U.assistant.uid, createdByName: U.assistant.name, createdAt: T(day(-2)), updatedAt: T(day(-2)) });
+  await B.collection('followups').add({ person: 'Bro. Chinedu Okeke', contact: '0806 111 2233', reason: 'Recovering after surgery', notes: 'Visit at home with the welfare team.', status: 'open', dueDate: T(day(1, 23, 59)), createdBy: U.pastor.uid, createdByName: U.pastor.name, createdAt: T(day(-6)), updatedAt: T(day(-6)) });
+  await B.collection('followups').add({ person: 'The Adeyemi family', contact: '0809 555 1212', reason: 'Bereavement — condolence visit', notes: '', status: 'open', dueDate: T(day(-1, 23, 59)), createdBy: U.assistant.uid, createdByName: U.assistant.name, createdAt: T(day(-3)), updatedAt: T(day(-3)) });
+  await B.collection('followups').add({ person: 'Sis. Ruth Akande', contact: '0802 444 9090', reason: 'New convert — discipleship class', notes: '', status: 'open', dueDate: T(day(6, 23, 59)), createdBy: U.assistant.uid, createdByName: U.assistant.name, createdAt: T(day(-2)), updatedAt: T(day(-2)) });
 
-  const prayer = (kind, who, content, extra = {}) => db.collection('prayers').add({ kind, content, name: U[who].name, confidential: false, anonymous: false, status: 'new', submittedBy: U[who].uid, createdAt: T(day(-2)), updatedAt: T(day(-2)), ...extra });
+  const prayer = (kind, who, content, extra = {}) => B.collection('prayers').add({ kind, content, name: U[who].name, confidential: false, anonymous: false, status: 'new', submittedBy: U[who].uid, createdAt: T(day(-2)), updatedAt: T(day(-2)), ...extra });
   await prayer('prayer', 'member', 'Please pray for my mother\'s recovery — she was admitted on Monday.');
   await prayer('prayer', 'choir', 'Travelling mercies for our team going to Ibadan for the choir conference.', { status: 'praying' });
   await prayer('prayer', 'member', 'A personal matter I would like the Pastor alone to pray about.', { confidential: true });
   await prayer('testimony', 'youth', 'I got the job I have been praying for since January! Thank you church family.', { status: 'shared' });
   await prayer('testimony', 'ushers', 'My daughter passed her WAEC with distinctions.', { status: 'new' });
 
-  await db.collection('pastoralNotes').add({ title: 'Reflections on leadership retreat', person: '', content: 'Private reflections — demo note visible only to the pastor.', date: T(day(-5)), createdBy: U.pastor.uid, createdAt: T(day(-5)), updatedAt: T(day(-5)) });
+  await B.collection('pastoralNotes').add({ title: 'Reflections on leadership retreat', person: '', content: 'Private reflections — demo note visible only to the pastor.', date: T(day(-5)), createdBy: U.pastor.uid, createdAt: T(day(-5)), updatedAt: T(day(-5)) });
 
-  const note = (to, from, title, body, link) => db.collection('notifications').add({ toUid: U[to].uid, fromUid: U[from].uid, fromName: U[from].name, title, body, link, read: false, createdAt: T(day(0, 8)) });
+  const note = (to, from, title, body, link) => B.collection('notifications').add({ toUid: U[to].uid, fromUid: U[from].uid, fromName: U[from].name, title, body, link, read: false, createdAt: T(day(0, 8)) });
   await note('pastor', 'member', 'Approval needed: Food items for widows outreach', '₦120,000.00 requested by Aisha Danjuma', '/finance/requests/r-food');
   await note('finance', 'pastor', 'Approved for payment: Generator servicing and new battery', '₦95,000.00 from Building Maintenance', '/finance/requests/r-generator');
   await note('children', 'pastor', "Children's end-of-year party: Clarification requested", 'Please break down the costs.', '/finance/requests/r-party');

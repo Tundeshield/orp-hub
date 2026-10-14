@@ -1,4 +1,5 @@
 // Restores a backup JSON (from scripts/backup.mjs or the in-app Admin → Backup) into Firestore.
+// Collection keys are full paths (e.g. branches/ijebu-ode/funds); --only matches the last segment or the full path.
 // Usage: node scripts/restore.mjs <service-account.json> <backup.json> [--only=funds,requests] [--yes]
 // Existing documents with the same ID are overwritten; other documents are left alone.
 import { readFileSync } from 'node:fs';
@@ -16,7 +17,7 @@ const des = (v) => {
   if (v && typeof v === 'object') return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, des(x)]));
   return v;
 };
-const names = Object.keys(backup.collections).filter((c) => !only || only.includes(c));
+const names = Object.keys(backup.collections).filter((c) => !only || only.includes(c) || only.includes(c.split('/').pop()));
 console.log(`Restoring into project "${key.project_id}" from backup taken ${backup.exportedAt}: ${names.join(', ')}`);
 if (!flags.includes('--yes')) { console.log('Dry run. Re-run with --yes to write.'); process.exit(0); }
 initializeApp({ credential: cert(key) });

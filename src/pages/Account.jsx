@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase.js';
 import { useAuth } from '../AuthContext.jsx';
+import { bdoc } from '../lib/db.js';
 import { ROLES } from '../lib/roles.js';
 import { Button, Card, ErrorNote, Field, PageHeader, useAction } from '../components/ui.jsx';
 
@@ -22,7 +23,11 @@ export default function Account() {
         </div>
         <ErrorNote error={error} />
         <div className="row" style={{ marginTop: 16 }}>
-          <Button busy={busy} onClick={() => run(() => updateDoc(doc(db, 'users', profile.uid), { name: f.name.trim() || profile.name, phone: f.phone.trim(), updatedAt: serverTimestamp() }), 'Saved')}>Save</Button>
+          <Button busy={busy} onClick={() => run(async () => {
+            const patch = { name: f.name.trim() || profile.name, phone: f.phone.trim(), updatedAt: serverTimestamp() };
+            await updateDoc(doc(db, 'users', profile.uid), patch);
+            if (profile.isMember) await updateDoc(bdoc('members', profile.uid), patch);
+          }, 'Saved')}>Save</Button>
           <Button variant="secondary" onClick={() => run(() => resetPassword(profile.email), 'Password reset email sent')}>Change password</Button>
           <Button variant="ghost" onClick={signOut}>Sign out</Button>
         </div>

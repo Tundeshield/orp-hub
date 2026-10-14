@@ -4,6 +4,8 @@ import { login, shot } from './helpers.js';
 // The public side: no account, reached by scanning a QR code.
 test('visitor sends a confidential prayer request without signing in', async ({ page }, info) => {
   await page.goto('/connect');
+  await expect(page.getByRole('heading', { name: 'Choose your branch' })).toBeVisible();
+  await page.getByText('The Elevation Church · Ijebu Ode').click();
   await expect(page.getByRole('heading', { name: 'Welcome' })).toBeVisible();
   await shot(page, info, 'public-home');
   await page.getByText('Send a prayer request').click();
@@ -21,7 +23,7 @@ test('visitor sends a confidential prayer request without signing in', async ({ 
 });
 
 test('visitor books an appointment from the QR link', async ({ page }, info) => {
-  await page.goto('/connect/book');
+  await page.goto('/connect/ijebu-ode/book');
   await expect(page.getByRole('heading', { name: 'Book time with the Pastor' })).toBeVisible();
   await page.locator('button.slot').nth(info.project.name === 'desktop' ? 3 : 6).click();
   await page.getByLabel('Your full name').fill(`Mrs Funke Visitor ${info.project.name}`);
@@ -35,7 +37,7 @@ test('visitor books an appointment from the QR link', async ({ page }, info) => 
 });
 
 test('visitors cannot reach staff pages', async ({ page }) => {
-  await page.goto('/connect');
+  await page.goto('/connect/ijebu-ode');
   await expect(page.getByRole('heading', { name: 'Welcome' })).toBeVisible();
   await page.goto('/finance');
   await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
@@ -51,4 +53,10 @@ test('the pastor sees public bookings and prayer requests', async ({ page }, inf
   await page.goto('/share');
   await expect(page.locator('img.poster-qr')).toHaveCount(3);
   await shot(page, info, 'share-qr');
+});
+
+test('each branch has its own public page', async ({ page }) => {
+  await page.goto('/connect/abeokuta/book');
+  await expect(page.locator('.public-church')).toHaveText('The Elevation Church · Abeokuta');
+  await expect(page.getByText(/no open times right now/)).toBeVisible();
 });

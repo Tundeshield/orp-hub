@@ -1,10 +1,11 @@
-import { collection, doc, serverTimestamp, writeBatch } from 'firebase/firestore';
+import { doc, serverTimestamp, writeBatch } from 'firebase/firestore';
 import { db } from '../firebase.js';
 import { addAudit, addNotify } from './db.js';
 import { fmtDateTime } from './dates.js';
+import { bcol, bdoc } from './db.js';
 
 function bookInto(batch, profile, slot, details) {
-  const apptRef = doc(collection(db, 'appointments'));
+  const apptRef = doc(bcol('appointments'));
   batch.set(apptRef, {
     slotId: slot.id, start: slot.start, end: slot.end,
     bookedBy: profile.uid, bookedByName: profile.name,
@@ -14,7 +15,7 @@ function bookInto(batch, profile, slot, details) {
     status: 'booked', rescheduledFrom: details.rescheduledFrom || null,
     createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
   });
-  batch.update(doc(db, 'slots', slot.id), { status: 'booked', appointmentId: apptRef.id, bookedBy: profile.uid, updatedAt: serverTimestamp() });
+  batch.update(bdoc('slots', slot.id), { status: 'booked', appointmentId: apptRef.id, bookedBy: profile.uid, updatedAt: serverTimestamp() });
   return apptRef.id;
 }
 
@@ -36,8 +37,8 @@ export async function bookSlot(profile, slot, details, managerUids) {
 
 export async function cancelAppointment(profile, appt, reason, managerUids) {
   const batch = writeBatch(db);
-  batch.update(doc(db, 'appointments', appt.id), { status: 'cancelled', cancelReason: reason || '', cancelledBy: profile.name, updatedAt: serverTimestamp() });
-  batch.update(doc(db, 'slots', appt.slotId), { status: 'open', appointmentId: null, bookedBy: null, updatedAt: serverTimestamp() });
+  batch.update(bdoc('appointments', appt.id), { status: 'cancelled', cancelReason: reason || '', cancelledBy: profile.name, updatedAt: serverTimestamp() });
+  batch.update(bdoc('slots', appt.slotId), { status: 'open', appointmentId: null, bookedBy: null, updatedAt: serverTimestamp() });
   const when = fmtDateTime(appt.start);
   if (appt.attendeeUid) addNotify(batch, profile, appt.attendeeUid, 'Appointment cancelled', `${when}${reason ? ` — ${reason}` : ''}`, '/meetings?tab=mine');
   for (const u of managerUids) addNotify(batch, profile, u, `Appointment cancelled: ${appt.attendeeName}`, `${when}${reason ? ` — ${reason}` : ''}`, '/meetings?tab=diary');
@@ -51,8 +52,8 @@ export async function rescheduleAppointment(profile, appt, newSlot, managerUids)
     attendeeUid: appt.attendeeUid ?? null, attendeeName: appt.attendeeName, phone: appt.phone, purpose: appt.purpose,
     location: appt.location, rescheduledFrom: appt.id,
   });
-  batch.update(doc(db, 'appointments', appt.id), { status: 'rescheduled', rescheduledTo: newId, cancelledBy: profile.name, updatedAt: serverTimestamp() });
-  batch.update(doc(db, 'slots', appt.slotId), { status: 'open', appointmentId: null, bookedBy: null, updatedAt: serverTimestamp() });
+  batch.update(bdoc('appointments', appt.id), { status: 'rescheduled', rescheduledTo: newId, cancelledBy: profile.name, updatedAt: serverTimestamp() });
+  batch.update(bdoc('slots', appt.slotId), { status: 'open', appointmentId: null, bookedBy: null, updatedAt: serverTimestamp() });
   const msg = `${fmtDateTime(appt.start)} → ${fmtDateTime(newSlot.start)}`;
   if (appt.attendeeUid) addNotify(batch, profile, appt.attendeeUid, 'Appointment rescheduled', msg, '/meetings?tab=mine');
   for (const u of managerUids) addNotify(batch, profile, u, `Appointment rescheduled: ${appt.attendeeName}`, msg, '/meetings?tab=diary');

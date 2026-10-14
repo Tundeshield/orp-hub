@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { collection, doc, serverTimestamp, Timestamp, writeBatch, deleteDoc } from 'firebase/firestore';
+import { doc, serverTimestamp, Timestamp, writeBatch, deleteDoc } from 'firebase/firestore';
 import { db } from '../firebase.js';
 import { useAuth } from '../AuthContext.jsx';
 import { col, query, where, useLive, addNotify, addAudit } from '../lib/db.js';
@@ -8,6 +8,7 @@ import { can } from '../lib/roles.js';
 import { useUsers } from '../lib/users.js';
 import { fmtDate, fromInputDate, isOverdue, toDate, toInputDate, relative } from '../lib/dates.js';
 import { Badge, Button, Card, Empty, ErrorNote, Field, Loading, Modal, PageHeader, Tabs, useAction } from '../components/ui.jsx';
+import { bcol, bdoc } from '../lib/db.js';
 
 const SOURCE_LINK = {
   request: (id) => `/finance/requests/${id}`,
@@ -37,7 +38,7 @@ export function TaskForm({ open, onClose, preset = {}, existing }) {
     const assignee = users.find((u) => u.uid === f.assigneeUid);
     const ok = await run(async () => {
       const batch = writeBatch(db);
-      const ref = existing ? doc(db, 'tasks', existing.id) : doc(collection(db, 'tasks'));
+      const ref = existing ? bdoc('tasks', existing.id) : doc(bcol('tasks'));
       const data = {
         title: f.title.trim(), description: f.description.trim(), assigneeUid: f.assigneeUid, assigneeName: assignee?.name || '',
         priority: f.priority, dueDate: f.dueDate ? Timestamp.fromDate(fromInputDate(f.dueDate, true)) : null, updatedAt: serverTimestamp(),
@@ -88,7 +89,7 @@ export function TaskRow({ t, onEdit }) {
   async function setStatus(status) {
     await run(async () => {
       const batch = writeBatch(db);
-      batch.update(doc(db, 'tasks', t.id), { status, completedAt: status === 'done' ? serverTimestamp() : null, updatedAt: serverTimestamp() });
+      batch.update(bdoc('tasks', t.id), { status, completedAt: status === 'done' ? serverTimestamp() : null, updatedAt: serverTimestamp() });
       if (status === 'done') addNotify(batch, profile, t.createdBy, `Task completed: ${t.title}`, `by ${profile.name}`, '/tasks');
       addAudit(batch, profile, `task.${status}`, 'task', t.id, t.title);
       await batch.commit();
@@ -116,7 +117,7 @@ export function TaskRow({ t, onEdit }) {
           </select>
         )}
         {canEdit && onEdit && <button className="icon-btn" onClick={() => onEdit(t)} aria-label="Edit task">✎</button>}
-        {t.createdBy === profile.uid && <button className="icon-btn" onClick={() => window.confirm('Delete this task?') && deleteDoc(doc(db, 'tasks', t.id))} aria-label="Delete task">🗑</button>}
+        {t.createdBy === profile.uid && <button className="icon-btn" onClick={() => window.confirm('Delete this task?') && deleteDoc(bdoc('tasks', t.id))} aria-label="Delete task">🗑</button>}
       </div>
     </li>
   );

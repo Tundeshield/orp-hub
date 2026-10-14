@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { collection, doc, serverTimestamp, Timestamp, updateDoc, writeBatch, deleteDoc, orderBy } from 'firebase/firestore';
+import { doc, serverTimestamp, Timestamp, updateDoc, writeBatch, deleteDoc, orderBy } from 'firebase/firestore';
 import { db } from '../../firebase.js';
 import { useAuth } from '../../AuthContext.jsx';
 import { col, query, where, useLive, addAudit } from '../../lib/db.js';
@@ -13,6 +13,7 @@ import { download } from '../../lib/csv.js';
 import { bookSlot, cancelAppointment, rescheduleAppointment } from '../../lib/meetingOps.js';
 import { Badge, Button, Card, Confirm, Empty, ErrorNote, Field, Loading, Modal, PageHeader, Tabs, useAction } from '../../components/ui.jsx';
 import { TaskForm } from '../Tasks.jsx';
+import { bcol, bdoc } from '../../lib/db.js';
 
 function groupByDay(slots) {
   const map = new Map();
@@ -222,8 +223,8 @@ function AppointmentList({ rows, loading, mine, manager, onCancel, onReschedule 
                     <Button size="sm" variant="ghost" onClick={() => onCancel(a)}>Cancel</Button>
                   </>}
                   {manager && a.status === 'booked' && past && <>
-                    <Button size="sm" variant="secondary" busy={statusAction.busy} onClick={() => statusAction.run(() => updateDoc(doc(db, 'appointments', a.id), { status: 'completed', updatedAt: serverTimestamp() }))}>Mark held</Button>
-                    <Button size="sm" variant="ghost" onClick={() => statusAction.run(() => updateDoc(doc(db, 'appointments', a.id), { status: 'no_show', updatedAt: serverTimestamp() }))}>No-show</Button>
+                    <Button size="sm" variant="secondary" busy={statusAction.busy} onClick={() => statusAction.run(() => updateDoc(bdoc('appointments', a.id), { status: 'completed', updatedAt: serverTimestamp() }))}>Mark held</Button>
+                    <Button size="sm" variant="ghost" onClick={() => statusAction.run(() => updateDoc(bdoc('appointments', a.id), { status: 'no_show', updatedAt: serverTimestamp() }))}>No-show</Button>
                   </>}
                 </div>
               </li>
@@ -255,7 +256,7 @@ function Availability({ slots }) {
     await run(async () => {
       for (let i = 0; i < fresh.length; i += 400) {
         const batch = writeBatch(db);
-        fresh.slice(i, i + 400).forEach((p) => batch.set(doc(collection(db, 'slots')), {
+        fresh.slice(i, i + 400).forEach((p) => batch.set(doc(bcol('slots')), {
           start: Timestamp.fromDate(p.start), end: Timestamp.fromDate(p.end), status: 'open', appointmentId: null, bookedBy: null,
           location: f.location.trim(), createdBy: profile.uid, createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
         }));
@@ -297,8 +298,8 @@ function Availability({ slots }) {
                       <div className="s">{s.status === 'booked' ? 'Booked' : s.status === 'blocked' ? 'Blocked' : 'Open'}</div>
                       {s.status !== 'booked' && (
                         <div className="row" style={{ gap: 4, marginTop: 6 }}>
-                          <button className="linkish small" onClick={() => del.run(() => updateDoc(doc(db, 'slots', s.id), { status: s.status === 'open' ? 'blocked' : 'open', updatedAt: serverTimestamp() }))}>{s.status === 'open' ? 'Block' : 'Unblock'}</button>
-                          <button className="linkish small" style={{ color: 'var(--red)' }} onClick={() => del.run(() => deleteDoc(doc(db, 'slots', s.id)))}>Remove</button>
+                          <button className="linkish small" onClick={() => del.run(() => updateDoc(bdoc('slots', s.id), { status: s.status === 'open' ? 'blocked' : 'open', updatedAt: serverTimestamp() }))}>{s.status === 'open' ? 'Block' : 'Unblock'}</button>
+                          <button className="linkish small" style={{ color: 'var(--red)' }} onClick={() => del.run(() => deleteDoc(bdoc('slots', s.id)))}>Remove</button>
                         </div>
                       )}
                     </div>
@@ -368,8 +369,8 @@ function NoteModal({ open, existing, onClose, appts }) {
     };
     const ok = await run(async () => {
       const batch = writeBatch(db);
-      if (existing) batch.update(doc(db, 'meetingNotes', existing.id), data);
-      else batch.set(doc(collection(db, 'meetingNotes')), { ...data, createdBy: profile.uid, createdByName: profile.name, createdAt: serverTimestamp() });
+      if (existing) batch.update(bdoc('meetingNotes', existing.id), data);
+      else batch.set(doc(bcol('meetingNotes')), { ...data, createdBy: profile.uid, createdByName: profile.name, createdAt: serverTimestamp() });
       await batch.commit();
     }, 'Note saved');
     if (ok) onClose();

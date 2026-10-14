@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from '../../firebase.js';
+import { updateDoc, serverTimestamp } from 'firebase/firestore';
+
 import { useAuth } from '../../AuthContext.jsx';
 import { col, query, where, useDoc, useLive } from '../../lib/db.js';
 import { can, isFinanceViewer } from '../../lib/roles.js';
@@ -11,6 +11,7 @@ import { fmtDate, toDate } from '../../lib/dates.js';
 import { Button, Card, Empty, ErrorNote, Loading, PageHeader, Stat, useAction } from '../../components/ui.jsx';
 import { FundLedgerForm } from './forms.jsx';
 import { RequestsTable, FundBar } from './Finance.jsx';
+import { bdoc } from '../../lib/db.js';
 
 export default function FundDetail() {
   const { id } = useParams();
@@ -34,7 +35,7 @@ export default function FundDetail() {
         actions={manager && <>
           <Button onClick={() => setModal('allocation')} disabled={!fund.active}>Adjust budget</Button>
           {can(profile, 'finance') && <Button variant="secondary" onClick={() => setModal('receipt')} disabled={!fund.active}>Record income</Button>}
-          <Button variant="ghost" busy={archive.busy} onClick={() => archive.run(() => updateDoc(doc(db, 'funds', id), { active: !fund.active, updatedAt: serverTimestamp() }), fund.active ? 'Fund archived' : 'Fund restored')}>
+          <Button variant="ghost" busy={archive.busy} onClick={() => archive.run(() => updateDoc(bdoc('funds', id), { active: !fund.active, updatedAt: serverTimestamp() }), fund.active ? 'Fund archived' : 'Fund restored')}>
             {fund.active ? 'Archive' : 'Restore'}
           </Button>
         </>} />

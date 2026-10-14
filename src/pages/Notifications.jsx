@@ -1,11 +1,12 @@
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { doc, updateDoc, writeBatch, deleteDoc } from 'firebase/firestore';
+import { updateDoc, writeBatch, deleteDoc } from 'firebase/firestore';
 import { db } from '../firebase.js';
 import { useAuth } from '../AuthContext.jsx';
 import { col, query, where, useLive } from '../lib/db.js';
 import { fmtDateTime, toDate } from '../lib/dates.js';
 import { Button, Card, Empty, ErrorNote, Loading, PageHeader } from '../components/ui.jsx';
+import { bdoc } from '../lib/db.js';
 
 export default function Notifications() {
   const { profile } = useAuth();
@@ -15,16 +16,16 @@ export default function Notifications() {
   const unread = rows.filter((n) => !n.read);
 
   async function open(n) {
-    if (!n.read) await updateDoc(doc(db, 'notifications', n.id), { read: true }).catch(console.error);
+    if (!n.read) await updateDoc(bdoc('notifications', n.id), { read: true }).catch(console.error);
     if (n.link) nav(n.link);
   }
   async function markAll() {
     const b = writeBatch(db);
-    unread.slice(0, 450).forEach((n) => b.update(doc(db, 'notifications', n.id), { read: true }));
+    unread.slice(0, 450).forEach((n) => b.update(bdoc('notifications', n.id), { read: true }));
     await b.commit();
   }
   async function clearRead() {
-    await Promise.all(rows.filter((n) => n.read).map((n) => deleteDoc(doc(db, 'notifications', n.id))));
+    await Promise.all(rows.filter((n) => n.read).map((n) => deleteDoc(bdoc('notifications', n.id))));
   }
 
   return (

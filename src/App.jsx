@@ -6,6 +6,7 @@ import { ToastProvider, Loading } from './components/ui.jsx';
 import Layout from './components/Layout.jsx';
 import Login from './pages/Login.jsx';
 import Pending from './pages/Pending.jsx';
+import { CreateFirstBranch, JoinBranch, WaitingForActivation } from './pages/Onboarding.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 import Finance from './pages/finance/Finance.jsx';
 import RequestDetail from './pages/finance/RequestDetail.jsx';
@@ -33,14 +34,17 @@ function NotConfigured() {
 }
 
 function Gate() {
-  const { user, profile, loading } = useAuth();
+  const { user, profile, loading, branches, branch } = useAuth();
   const { pathname } = useLocation();
   if (pathname === '/connect' || pathname.startsWith('/connect/')) return <Routes><Route path="/connect/*" element={<Connect />} /></Routes>;
   if (loading) return <Loading label="Opening Pastor's Desk…" />;
   if (!user || user.isAnonymous) return <Login />;
-  if (!profile || !profile.active || !(profile.roles || []).length) return <Pending />;
+  if (!profile) return <Pending />;
+  if (!branches.length) return <CreateFirstBranch />;
+  if (!branch) return <JoinBranch />;
+  if (!profile.active || !(profile.roles || []).length) return <WaitingForActivation />;
   return (
-    <WorkProvider>
+    <WorkProvider key={branch.id}>
       <Routes>
         <Route element={<Layout />}>
           <Route index element={<Dashboard />} />

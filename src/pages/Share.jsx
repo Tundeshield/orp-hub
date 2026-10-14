@@ -1,20 +1,21 @@
 import { useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import QRCode from 'qrcode';
-import { doc, serverTimestamp } from 'firebase/firestore';
+import { serverTimestamp } from 'firebase/firestore';
 import { db, churchName } from '../firebase.js';
 import { useAuth } from '../AuthContext.jsx';
 import { useDoc, addAudit } from '../lib/db.js';
 import { isDiaryManager } from '../lib/roles.js';
 import { writeBatch } from 'firebase/firestore';
 import { Button, Card, ErrorNote, Field, Loading, PageHeader, useAction } from '../components/ui.jsx';
+import { bdoc } from '../lib/db.js';
 
 const ORIGIN = typeof window !== 'undefined' ? window.location.origin : '';
 
 const POSTERS = [
-  { key: 'connect', path: '/connect', title: 'Connect with the Pastor', line: 'Scan to book time with the Pastor, send a prayer request or share a testimony.' },
-  { key: 'prayer', path: '/connect/prayer?kind=prayer', title: 'Send us your prayer points', line: 'Scan with your phone camera. You can send it confidentially.' },
-  { key: 'book', path: '/connect/book', title: 'Book time with the Pastor', line: 'Scan to choose an available appointment time.' },
+  { key: 'connect', path: '', title: 'Connect with the Pastor', line: 'Scan to book time with the Pastor, send a prayer request or share a testimony.' },
+  { key: 'prayer', path: '/prayer?kind=prayer', title: 'Send us your prayer points', line: 'Scan with your phone camera. You can send it confidentially.' },
+  { key: 'book', path: '/book', title: 'Book time with the Pastor', line: 'Scan to choose an available appointment time.' },
 ];
 
 function useQR(url) {
@@ -26,14 +27,14 @@ function useQR(url) {
   return src;
 }
 
-function Poster({ p }) {
-  const url = `${ORIGIN}${p.path}`;
+function Poster({ p, branchId, branchName }) {
+  const url = `${ORIGIN}/connect/${branchId}${p.path}`;
   const src = useQR(url);
   const [copied, setCopied] = useState(false);
   return (
     <Card className="poster-card">
       <div className="poster" id={`poster-${p.key}`}>
-        <div className="poster-church">{churchName}</div>
+        <div className="poster-church">{branchName || churchName}</div>
         <div className="poster-title">{p.title}</div>
         {src ? <img src={src} alt={`QR code for ${url}`} className="poster-qr" /> : <Loading />}
         <div className="poster-line">{p.line}</div>
@@ -68,7 +69,7 @@ export default function Share() {
   async function save() {
     await run(async () => {
       const batch = writeBatch(db);
-      batch.set(doc(db, 'settings', 'public'), {
+      batch.set(bdoc('settings', 'public'), {
         bookingEnabled: !!f.bookingEnabled, prayerEnabled: !!f.prayerEnabled, officePhone: f.officePhone.trim(),
         welcomeNote: f.welcomeNote.trim(), bookingNote: f.bookingNote.trim(), prayerNote: f.prayerNote.trim(),
         bookingDays: Math.min(90, Math.max(1, Number(f.bookingDays) || 21)), updatedBy: profile.name, updatedAt: serverTimestamp(),
@@ -80,11 +81,11 @@ export default function Share() {
 
   return (
     <>
-      <PageHeader title="Public page & QR codes" subtitle="Let anyone book time with the Pastor or send prayer points — no account needed."
-        actions={<Button variant="secondary" onClick={() => window.open('/connect', '_blank')}>Open public page ↗</Button>} />
+      <PageHeader title="Public page & QR codes" subtitle={`${profile.branchName}: let anyone book time with the Pastor or send prayer points — no account needed.`}
+        actions={<Button variant="secondary" onClick={() => window.open(`/connect/${profile.branchId}`, '_blank')}>Open public page ↗</Button>} />
       <div className="grid detail-grid">
         <div className="stack">
-          {POSTERS.map((p) => <Poster key={p.key} p={p} />)}
+          {POSTERS.map((p) => <Poster key={p.key} p={p} branchId={profile.branchId} branchName={profile.branchName} />)}
         </div>
         <Card title="Settings">
           <div className="stack">

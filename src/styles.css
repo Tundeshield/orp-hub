@@ -295,3 +295,5 @@ input[type=checkbox] { width: auto; }
   body[data-print-poster] .poster-url { font-size: 16px; }
   body[data-print-poster] .detail-grid { display: block; }
 }
+
+.branch-switch { width: auto; max-width: 60vw; font-weight: 500; background: var(--card); }
