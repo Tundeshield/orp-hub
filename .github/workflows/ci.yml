@@ -89,7 +89,7 @@ jobs:
           export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/sa.json"
           PROJECT=$(node -e "console.log(JSON.parse(require('fs').readFileSync(process.env.GOOGLE_APPLICATION_CREDENTIALS,'utf8')).project_id)")
           set +e
-          npx firebase deploy --only firestore:rules --project "$PROJECT" --non-interactive > deploy.log 2>&1
+          node scripts/deploy-rules.mjs > deploy.log 2>&1
           code=$?
           cat deploy.log
           if [ $code -ne 0 ]; then
