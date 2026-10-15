@@ -1,0 +1,78 @@
+[36m[1mi  emulators:[22m[39m Starting emulators: auth, firestore
+[36m[1mi  emulators:[22m[39m Detected demo project ID "demo-orp", emulated services will use a demo configuration and attempts to access non-emulated services for this project will fail.
+[36m[1mi  firestore:[22m[39m Firestore Emulator logging to [1mfirestore-debug.log[22m
+[32m[1m✔  firestore:[22m[39m Firestore Emulator was started in standard edition.
+[32m[1m✔  firestore:[22m[39m Firestore Emulator UI websocket is running on 9150.
+[36m[1mi [22m[39m Running script: [1mnpm run seed:emulator && npx playwright test[22m
+
+> orp-hub@1.0.0 seed:emulator
+> node scripts/seed-emulator.mjs
+
+Seeded demo-orp. Sign in with any of:
+  admin@orp.test         admin      Femi Adeyemi
+  pastor@orp.test        pastor     Pastor Samuel Okafor
+  assistant@orp.test     assistant  Grace Bello
+  finance@orp.test       finance    Musa Ibrahim
+  youth@orp.test         leader     Tobi Adewale
+  choir@orp.test         leader     Chioma Nwosu
+  ushers@orp.test        leader     Kunle Oyelaran
+  children@orp.test      leader     Blessing Eze
+  member@orp.test        member     Aisha Danjuma
+  newvolunteer@orp.test  (awaiting activation)
+Password for all: Password123!
+
+Running 40 tests using 1 worker
+
+  ✓   1 [desktop] › e2e/public.spec.js:5:1 › visitor sends a confidential prayer request without signing in (2.9s)
+  ✓   2 [desktop] › e2e/public.spec.js:25:1 › visitor books an appointment from the QR link (1.8s)
+  ✓   3 [desktop] › e2e/public.spec.js:39:1 › visitors cannot reach staff pages (504ms)
+  ✓   4 [desktop] › e2e/public.spec.js:46:1 › the pastor sees public bookings and prayer requests (3.1s)
+  ✓   5 [desktop] › e2e/public.spec.js:58:1 › each branch has its own public page (413ms)
+  ✓   6 [desktop] › e2e/workflows.spec.js:10:3 › workflows › pastor sees the approval inbox and approves a request (3.2s)
+  ✓   7 [desktop] › e2e/workflows.spec.js:22:3 › workflows › pastor asks for clarification and the requester resubmits (2.6s)
+[browser error] Error: Payment is more than the amount still owed on this request.
+    at Gs (http://127.0.0.1:4173/assets/index-DOyeNnZF.js:9:30240)
+    at http://127.0.0.1:4173/assets/index-DOyeNnZF.js:12:10739
+  ✓   8 [desktop] › e2e/workflows.spec.js:42:3 › workflows › finance officer records a partial payment and cannot overpay (4.0s)
+  ✓   9 [desktop] › e2e/workflows.spec.js:68:3 › workflows › pastor cannot approve more than a fund has available (2.0s)
+  ✓  10 [desktop] › e2e/workflows.spec.js:88:3 › workflows › member books an appointment; the slot is no longer offered (1.7s)
+  ✓  11 [desktop] › e2e/workflows.spec.js:104:3 › workflows › member can reschedule and cancel (1.5s)
+  ✓  12 [desktop] › e2e/workflows.spec.js:119:3 › workflows › ministry leader submits a report; reviewer requests revision (3.4s)
+  ✓  13 [desktop] › e2e/workflows.spec.js:145:3 › workflows › pastor turns a report issue into a task; assignee completes it (1.9s)
+  ✓  14 [desktop] › e2e/workflows.spec.js:162:3 › workflows › confidential areas and finance records are restricted (1.7s)
+  ✓  15 [desktop] › e2e/workflows.spec.js:179:3 › workflows › admin activates a new account with a role (1.9s)
+  ✓  16 [desktop] › e2e/workflows.spec.js:192:3 › workflows › branches are separate; the super admin can switch between them (1.9s)
+  ✓  17 [desktop] › e2e/workflows.spec.js:210:3 › workflows › a brand new sign-up chooses a branch and waits for activation (665ms)
+  ✓  18 [desktop] › e2e/workflows.spec.js:231:5 › every page renders (visual pass) › pages for pastor@orp.test (10.8s)
+  ✓  19 [desktop] › e2e/workflows.spec.js:231:5 › every page renders (visual pass) › pages for member@orp.test (3.3s)
+  ✓  20 [desktop] › e2e/workflows.spec.js:231:5 › every page renders (visual pass) › pages for youth@orp.test (2.4s)
+  ✓  21 [mobile] › e2e/public.spec.js:5:1 › visitor sends a confidential prayer request without signing in (2.3s)
+  ✓  22 [mobile] › e2e/public.spec.js:25:1 › visitor books an appointment from the QR link (2.0s)
+  ✓  23 [mobile] › e2e/public.spec.js:39:1 › visitors cannot reach staff pages (660ms)
+  -  24 [mobile] › e2e/public.spec.js:46:1 › the pastor sees public bookings and prayer requests
+  ✓  25 [mobile] › e2e/public.spec.js:58:1 › each branch has its own public page (535ms)
+  -  26 [mobile] › e2e/workflows.spec.js:10:3 › workflows › pastor sees the approval inbox and approves a request
+  -  27 [mobile] › e2e/workflows.spec.js:22:3 › workflows › pastor asks for clarification and the requester resubmits
+  -  28 [mobile] › e2e/workflows.spec.js:42:3 › workflows › finance officer records a partial payment and cannot overpay
+  -  29 [mobile] › e2e/workflows.spec.js:68:3 › workflows › pastor cannot approve more than a fund has available
+  -  30 [mobile] › e2e/workflows.spec.js:88:3 › workflows › member books an appointment; the slot is no longer offered
+  -  31 [mobile] › e2e/workflows.spec.js:104:3 › workflows › member can reschedule and cancel
+  -  32 [mobile] › e2e/workflows.spec.js:119:3 › workflows › ministry leader submits a report; reviewer requests revision
+  -  33 [mobile] › e2e/workflows.spec.js:145:3 › workflows › pastor turns a report issue into a task; assignee completes it
+  -  34 [mobile] › e2e/workflows.spec.js:162:3 › workflows › confidential areas and finance records are restricted
+  -  35 [mobile] › e2e/workflows.spec.js:179:3 › workflows › admin activates a new account with a role
+  -  36 [mobile] › e2e/workflows.spec.js:192:3 › workflows › branches are separate; the super admin can switch between them
+  -  37 [mobile] › e2e/workflows.spec.js:210:3 › workflows › a brand new sign-up chooses a branch and waits for activation
+  ✓  38 [mobile] › e2e/workflows.spec.js:231:5 › every page renders (visual pass) › pages for pastor@orp.test (12.9s)
+  ✓  39 [mobile] › e2e/workflows.spec.js:231:5 › every page renders (visual pass) › pages for member@orp.test (4.1s)
+  ✓  40 [mobile] › e2e/workflows.spec.js:231:5 › every page renders (visual pass) › pages for youth@orp.test (3.1s)
+::notice title=🎭 Playwright Run Summary::  13 skipped%0A  27 passed (1.4m)
+
+  13 skipped
+  27 passed (1.4m)
+[32m[1m✔ [22m[39m Script exited successfully (code 0)
+[36m[1mi  emulators:[22m[39m Shutting down emulators.
+[36m[1mi  firestore:[22m[39m Stopping Firestore Emulator
+[36m[1mi  auth:[22m[39m Stopping Authentication Emulator
+[36m[1mi  hub:[22m[39m Stopping emulator hub
+[36m[1mi  logging:[22m[39m Stopping Logging Emulator
