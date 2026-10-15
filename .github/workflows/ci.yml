@@ -88,6 +88,14 @@ jobs:
           printf '%s' "$SA" > "$RUNNER_TEMP/sa.json"
           export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/sa.json"
           PROJECT=$(node -e "console.log(JSON.parse(require('fs').readFileSync(process.env.GOOGLE_APPLICATION_CREDENTIALS,'utf8')).project_id)")
-          npx firebase deploy --only firestore:rules --project "$PROJECT" --non-interactive
+          set +e
+          npx firebase deploy --only firestore:rules --project "$PROJECT" --non-interactive > deploy.log 2>&1
+          code=$?
+          cat deploy.log
+          if [ $code -ne 0 ]; then
+            msg=$(grep -iE "error|denied|permission|not enabled|HTTP" deploy.log | tail -6 | tr '\n' ' ' | cut -c1-900)
+            echo "::error::Rules deploy failed: $msg"
+            exit 1
+          fi
           echo "::notice::Firestore rules published to $PROJECT"
           rm -f "$RUNNER_TEMP/sa.json"
